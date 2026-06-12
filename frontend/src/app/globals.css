@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Class-strategy dark mode (Tailwind v4): `dark:` utilities apply when an
+   ancestor has the `.dark` class, which is set pre-paint by the inline
+   script in layout.tsx and toggled by ThemeToggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
