@@ -1,0 +1,19 @@
+# Runtime
+Django==5.2.15
+djangorestframework==3.17.1
+django-cors-headers==4.9.0
+drf-spectacular==0.29.0
+dj-database-url==3.1.2
+psycopg2-binary==2.9.12
+gunicorn==26.0.0
+
+# Testing
+pytest==9.0.3
+pytest-django==4.12.0
+pytest-cov==7.1.0
+factory_boy==3.3.3
+
+# Lint / format
+black==26.5.1
+isort==8.0.1
+flake8==7.3.0

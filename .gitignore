@@ -1,0 +1,31 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+db.sqlite3
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Environment files (each app ships a committed .env.example instead)
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# internal working docs (not part of the deliverable)
+.internal/
