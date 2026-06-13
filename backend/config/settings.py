@@ -12,6 +12,7 @@ override via env vars:
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
@@ -39,16 +40,16 @@ DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "*")
 
 INSTALLED_APPS = [
-    # contenttypes + auth stay installed because DRF imports auth models at
-    # import time, even though the API itself is unauthenticated (see below).
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.staticfiles",
     # Third-party
     "rest_framework",
+    "rest_framework_simplejwt",
     "corsheaders",
     "drf_spectacular",
     # Local
+    "apps.users",
     "apps.notes",
 ]
 
@@ -95,9 +96,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # --- DRF / API --------------------------------------------------------------
 
 REST_FRAMEWORK = {
-    # No auth: out of scope for the challenge (see apps/notes/models.py docstring).
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    # JWT everywhere by default; the only AllowAny views are register/token
+    # (declared per-view) and /api/health (a plain Django view, not DRF).
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.notes.pagination.DefaultPagination",
     "PAGE_SIZE": 12,
@@ -110,6 +114,20 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Notes-taking API for the Turbo AI engineering challenge.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# --- Auth -------------------------------------------------------------------
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
 # --- CORS -------------------------------------------------------------------

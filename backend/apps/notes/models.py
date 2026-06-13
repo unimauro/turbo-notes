@@ -1,25 +1,63 @@
+from django.conf import settings
 from django.db import models
+
+DEFAULT_CATEGORY_NAME = "Random Thoughts"
+
+
+class Category(models.Model):
+    """A fixed, seeded palette of note categories (see migration 0002).
+
+    ``color`` stores a palette *slug* — the frontend owns the actual hex
+    values, so a design retune never needs a backend deploy or migration.
+    """
+
+    class Color(models.TextChoices):
+        CORAL = "coral"
+        YELLOW = "yellow"
+        TEAL = "teal"
+        LAVENDER = "lavender"
+
+    name = models.CharField(max_length=64, unique=True)
+    color = models.CharField(max_length=16, choices=Color.choices)
+
+    class Meta:
+        ordering = ["id"]  # seed order == display order (sidebar/dropdown)
+        verbose_name_plural = "categories"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+def get_default_category() -> Category:
+    """Default for notes created without an explicit category.
+
+    Resolved lazily (serializer-time), never as a model/migration default,
+    so the schema migrations stay decoupled from seed data.
+    """
+    return Category.objects.get(name=DEFAULT_CATEGORY_NAME)
 
 
 class Note(models.Model):
-    """A single note: a required title plus optional free-form content.
+    """A user's note: optional title/content, always categorized and owned.
 
-    Scope decisions (conscious, for the challenge):
+    Decisions:
 
-    * **No owner / auth FK** — the challenge does not ask for authentication,
-      so notes are global. Adding a ``user`` FK later is a single migration;
-      building auth now would be overengineering for the brief.
-    * **Plain BigAutoField PK, not UUID** — sequential ids are fine for a
-      single-tenant API with no auth (nothing to enumerate that isn't already
-      public via the list endpoint), they index/paginate better, and they keep
-      URLs human-friendly. Swapping to UUIDs is trivial if multi-tenancy ever
-      lands.
-    * ``updated_at`` is indexed because it backs the default ordering of the
-      list endpoint (``-updated_at``) on every page load.
+    * ``owner`` CASCADE — notes are meaningless without their author.
+    * ``category`` PROTECT — categories are seed data; deleting one with
+      notes attached should be a loud error, not silent data loss.
+    * ``title`` may be blank: the editor autosaves drafts before a title is
+      typed (the UI shows a placeholder for untitled notes).
+    * Plain BigAutoField PK — ids are only reachable through the owner-scoped
+      queryset, so enumeration leaks nothing; sequential ids index better.
+    * ``updated_at`` indexed: backs the default ``-updated_at`` ordering.
     """
 
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, blank=True, default="")
     content = models.TextField(blank=True, default="")
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notes"
+    )
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
@@ -27,4 +65,4 @@ class Note(models.Model):
         ordering = ["-updated_at"]
 
     def __str__(self) -> str:
-        return self.title
+        return self.title or f"Untitled note #{self.pk}"

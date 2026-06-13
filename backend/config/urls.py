@@ -11,6 +11,7 @@ def health(_request):
 
 
 urlpatterns = [
+    path("api/v1/", include("apps.users.urls")),
     path("api/v1/", include("apps.notes.urls")),
     path("api/health", health, name="health"),
     path("api/schema", SpectacularAPIView.as_view(), name="schema"),
