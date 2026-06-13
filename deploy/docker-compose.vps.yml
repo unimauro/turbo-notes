@@ -1,0 +1,65 @@
+# Deployment for a server where a control panel (HestiaCP) already owns ports
+# 80/443 and TLS (e.g. the same box running other apps).
+#
+# This stack exposes ONLY a single loopback port (127.0.0.1:3100); nothing binds
+# to 80/443 and nothing is reachable from the public internet directly. You then
+# point the panel's domain (notes.cardenas.pe) at 127.0.0.1:3100 with SSL.
+#
+# It is isolated from anything else on the box: own project name, own network,
+# own named volume, no host ports except the loopback proxy.
+#
+#   docker compose -p turbo-notes -f docker-compose.vps.yml --env-file .env up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: notes
+    volumes:
+      - turbo_notes_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes -d notes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://notes:${POSTGRES_PASSWORD}@db:5432/notes
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: ${DOMAIN}
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # Loopback only — the panel proxies the public domain here.
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./Caddyfile.vps:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  turbo_notes_pgdata:
