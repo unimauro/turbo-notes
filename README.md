@@ -21,8 +21,13 @@ The guiding principle throughout: **the right amount of engineering for the scop
 
 ## Screenshots
 
-> _Placeholder — add before submission:_
-> sign-up screen · board with category sidebar and pastel masonry grid · fullscreen editor with category dropdown · empty state · dark mode.
+| Sign in | Board |
+| --- | --- |
+| ![Login](docs/screenshots/01-login.png) | ![Board](docs/screenshots/03-board.png) |
+
+| Full-screen editor (autosave) | Dark mode |
+| --- | --- |
+| ![Editor](docs/screenshots/04-editor.png) | ![Dark mode](docs/screenshots/05-board-dark.png) |
 
 ## Architecture
 
