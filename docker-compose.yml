@@ -29,6 +29,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgres://notes:notes@db:5432/notes
+      # Also signs the JWTs (simplejwt default) — auth added no new env vars.
       DJANGO_SECRET_KEY: compose-dev-only-secret-key-change-in-prod
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: "*"

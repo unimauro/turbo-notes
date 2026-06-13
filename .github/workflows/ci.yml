@@ -33,7 +33,7 @@ jobs:
           black --check .
           isort --check-only .
 
-      - name: Tests with coverage (floor 80%)
+      - name: Tests with coverage (floor 85%)
         run: pytest --cov=apps --cov-report=term --cov-fail-under=85
 
   frontend:
