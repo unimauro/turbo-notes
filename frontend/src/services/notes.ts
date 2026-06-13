@@ -1,23 +1,14 @@
-import axios from "axios";
-
+import { api } from "@/services/api";
 import type { Note, NoteInput, Paginated } from "@/types/note";
-
-/**
- * Single axios instance for the whole app. The base URL is resolved at build
- * time from NEXT_PUBLIC_API_URL so the same code works locally and in Docker.
- */
-export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1",
-  headers: { "Content-Type": "application/json" },
-});
 
 export interface ListNotesParams {
   search?: string;
   page?: number;
   ordering?: string;
+  category?: number;
 }
 
-/** GET /notes/ — supports DRF ?search=, ?page= and ?ordering=. */
+/** GET /notes/ — supports ?category=, DRF ?search=, ?page= and ?ordering=. */
 export async function listNotes(
   params: ListNotesParams = {},
 ): Promise<Paginated<Note>> {
@@ -26,6 +17,7 @@ export async function listNotes(
       ...(params.search ? { search: params.search } : {}),
       ...(params.page && params.page > 1 ? { page: params.page } : {}),
       ...(params.ordering ? { ordering: params.ordering } : {}),
+      ...(params.category ? { category: params.category } : {}),
     },
   });
   return data;

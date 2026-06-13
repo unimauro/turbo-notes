@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
+import { Inter, Playfair_Display } from "next/font/google";
 
 import Providers from "@/lib/providers";
 
 import "./globals.css";
 
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+});
+
 export const metadata: Metadata = {
   title: "Turbo Notes",
-  description: "Fast, simple notes — Turbo AI challenge.",
+  description: "A cozy little home for your charming notes.",
 };
 
 /**
@@ -22,11 +29,15 @@ export default function RootLayout({
 }>) {
   return (
     // suppressHydrationWarning: the inline script may add `.dark` before React hydrates.
-    <html lang="en" suppressHydrationWarning className="h-full antialiased">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${playfair.variable} h-full antialiased`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="flex min-h-full flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <body className="flex min-h-full flex-col bg-cream font-sans text-ink-soft dark:bg-bark dark:text-linen">
         <Providers>{children}</Providers>
       </body>
     </html>

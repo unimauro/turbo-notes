@@ -9,14 +9,12 @@ interface NoteListProps {
   onDelete: (note: Note) => void;
 }
 
+/** Masonry-ish responsive grid via CSS columns (cards keep natural heights). */
 export default function NoteList({ notes, onEdit, onDelete }: NoteListProps) {
   return (
-    <ul
-      aria-label="Notes"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-    >
+    <ul aria-label="Notes" className="columns-1 gap-5 sm:columns-2 xl:columns-3">
       {notes.map((note) => (
-        <li key={note.id} className="list-none">
+        <li key={note.id} className="mb-5 break-inside-avoid list-none">
           <NoteCard note={note} onEdit={onEdit} onDelete={onDelete} />
         </li>
       ))}

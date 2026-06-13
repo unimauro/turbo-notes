@@ -8,6 +8,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
+import { categoriesKeys } from "@/hooks/useCategories";
 import {
   createNote,
   deleteNote,
@@ -15,7 +16,7 @@ import {
   updateNote,
   type ListNotesParams,
 } from "@/services/notes";
-import type { Note, NoteInput, Paginated } from "@/types/note";
+import type { CategoryRef, Note, NoteInput, Paginated } from "@/types/note";
 
 export const notesKeys = {
   all: ["notes"] as const,
@@ -25,7 +26,7 @@ export const notesKeys = {
 type NotesPage = Paginated<Note>;
 type Snapshot = [readonly unknown[], NotesPage | undefined][];
 
-/** Paginated, searchable notes list. Previous page is kept while fetching. */
+/** Paginated, filterable notes list. Previous page is kept while fetching. */
 export function useNotes(params: ListNotesParams) {
   return useQuery({
     queryKey: notesKeys.list(params),
@@ -41,7 +42,7 @@ export function useNotes(params: ListNotesParams) {
  *   onMutate  — cancel in-flight list queries, snapshot every cached page,
  *               write the optimistic result into the cache
  *   onError   — restore the snapshot (full rollback)
- *   onSettled — invalidate so the server state wins either way
+ *   onSettled — invalidate (notes + category counts) so server state wins
  * ------------------------------------------------------------------------ */
 
 function snapshotLists(qc: QueryClient): Snapshot {
@@ -52,12 +53,29 @@ function restoreLists(qc: QueryClient, snapshot: Snapshot | undefined): void {
   snapshot?.forEach(([key, data]) => qc.setQueryData(key, data));
 }
 
+function invalidateAll(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: notesKeys.all });
+  qc.invalidateQueries({ queryKey: categoriesKeys.all });
+}
+
+export interface CreateNoteVars {
+  input: NoteInput;
+  /** Full category for the optimistic card; the server echoes the real one back. */
+  category: CategoryRef;
+}
+
+export interface UpdateNoteVars {
+  id: number;
+  input: Partial<NoteInput>;
+  category?: CategoryRef;
+}
+
 export function useCreateNote(activeParams: ListNotesParams) {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: NoteInput) => createNote(input),
-    onMutate: async (input) => {
+    mutationFn: ({ input }: CreateNoteVars) => createNote(input),
+    onMutate: async ({ input, category }) => {
       await qc.cancelQueries({ queryKey: notesKeys.all });
       const snapshot = snapshotLists(qc);
 
@@ -67,6 +85,7 @@ export function useCreateNote(activeParams: ListNotesParams) {
         id: -Date.now(),
         title: input.title,
         content: input.content,
+        category,
         created_at: now,
         updated_at: now,
       };
@@ -79,8 +98,8 @@ export function useCreateNote(activeParams: ListNotesParams) {
 
       return { snapshot };
     },
-    onError: (_err, _input, ctx) => restoreLists(qc, ctx?.snapshot),
-    onSettled: () => qc.invalidateQueries({ queryKey: notesKeys.all }),
+    onError: (_err, _vars, ctx) => restoreLists(qc, ctx?.snapshot),
+    onSettled: () => invalidateAll(qc),
   });
 }
 
@@ -88,9 +107,8 @@ export function useUpdateNote() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, input }: { id: number; input: NoteInput }) =>
-      updateNote(id, input),
-    onMutate: async ({ id, input }) => {
+    mutationFn: ({ id, input }: UpdateNoteVars) => updateNote(id, input),
+    onMutate: async ({ id, input, category }) => {
       await qc.cancelQueries({ queryKey: notesKeys.all });
       const snapshot = snapshotLists(qc);
 
@@ -100,7 +118,15 @@ export function useUpdateNote() {
         qc.setQueryData<NotesPage>(key, {
           ...page,
           results: page.results.map((note) =>
-            note.id === id ? { ...note, ...input, updated_at: updatedAt } : note,
+            note.id === id
+              ? {
+                  ...note,
+                  ...("title" in input ? { title: input.title ?? "" } : {}),
+                  ...("content" in input ? { content: input.content ?? "" } : {}),
+                  ...(category ? { category } : {}),
+                  updated_at: updatedAt,
+                }
+              : note,
           ),
         });
       });
@@ -108,7 +134,7 @@ export function useUpdateNote() {
       return { snapshot };
     },
     onError: (_err, _vars, ctx) => restoreLists(qc, ctx?.snapshot),
-    onSettled: () => qc.invalidateQueries({ queryKey: notesKeys.all }),
+    onSettled: () => invalidateAll(qc),
   });
 }
 
@@ -135,6 +161,6 @@ export function useDeleteNote() {
       return { snapshot };
     },
     onError: (_err, _id, ctx) => restoreLists(qc, ctx?.snapshot),
-    onSettled: () => qc.invalidateQueries({ queryKey: notesKeys.all }),
+    onSettled: () => invalidateAll(qc),
   });
 }

@@ -1,26 +1,55 @@
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-const WEEK = 7 * DAY;
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 /**
- * Compact relative time ("just now", "5m ago", "2d ago"); falls back to an
- * absolute date past ~4 weeks, which reads better on old notes.
+ * Card meta date per the prototype: "today", "yesterday", else "July 16"
+ * (with the year appended only when it differs from the current one).
  */
-export function formatRelativeTime(iso: string, now: number = Date.now()): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
+export function formatCardDate(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "";
 
-  const diff = now - then;
-  if (diff < MINUTE) return "just now";
-  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
-  if (diff < WEEK) return `${Math.floor(diff / DAY)}d ago`;
-  if (diff < 4 * WEEK) return `${Math.floor(diff / WEEK)}w ago`;
+  if (isSameDay(then, now)) return "today";
 
-  return new Date(then).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(then, yesterday)) return "yesterday";
+
+  const base = `${MONTHS[then.getMonth()]} ${then.getDate()}`;
+  return then.getFullYear() === now.getFullYear()
+    ? base
+    : `${base}, ${then.getFullYear()}`;
+}
+
+/** Editor timestamp per the prototype: "July 21, 2024 at 8:39pm". */
+export function formatEditorTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const hours24 = d.getHours();
+  const meridiem = hours24 >= 12 ? "pm" : "am";
+  const hours12 = hours24 % 12 || 12;
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${hours12}:${minutes}${meridiem}`;
 }

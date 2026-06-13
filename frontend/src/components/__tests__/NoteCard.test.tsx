@@ -8,8 +8,9 @@ const note: Note = {
   id: 1,
   title: "Groceries",
   content: "Milk, eggs, bread and a suspicious amount of coffee.",
+  category: { id: 2, name: "Personal", color: "teal" },
   created_at: "2026-01-01T10:00:00Z",
-  updated_at: new Date(Date.now() - 5 * 60_000).toISOString(), // 5 minutes ago
+  updated_at: new Date().toISOString(), // today
 };
 
 describe("NoteCard", () => {
@@ -22,22 +23,23 @@ describe("NoteCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders a relative updated time", () => {
+  it("renders the meta line: relative date + category name", () => {
     render(<NoteCard note={note} onEdit={jest.fn()} onDelete={jest.fn()} />);
 
-    expect(screen.getByText("5m ago")).toBeInTheDocument();
+    expect(screen.getByText("today")).toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeInTheDocument();
   });
 
-  it("falls back to a placeholder when content is empty", () => {
+  it("shows 'Untitled' when the autosaved draft has no title", () => {
     render(
       <NoteCard
-        note={{ ...note, content: "" }}
+        note={{ ...note, title: "  " }}
         onEdit={jest.fn()}
         onDelete={jest.fn()}
       />,
     );
 
-    expect(screen.getByText("No content")).toBeInTheDocument();
+    expect(screen.getByText("Untitled")).toBeInTheDocument();
   });
 
   it("calls onEdit when the card is clicked", async () => {

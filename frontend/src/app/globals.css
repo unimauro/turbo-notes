@@ -6,9 +6,24 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  /* Fonts — variables provided by next/font in layout.tsx */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: var(--font-playfair), Georgia, "Times New Roman", serif;
+
+  /* Cozy palette */
+  --color-cream: #faf1e3; /* app background */
+  --color-paper: #f7efdc; /* buttons / inputs */
+  --color-ink: #6b5638; /* headings, strong text */
+  --color-ink-soft: #5c5347; /* body text */
+  --color-ink-line: #8b7355; /* 1px borders */
+
+  /* Dark mode: warm brown, same pastel cards slightly muted */
+  --color-bark: #2b2118; /* dark app background */
+  --color-bark-soft: #3a2d20; /* dark surfaces */
+  --color-linen: #ead9bf; /* light text on bark */
+  --color-linen-soft: #cdbb9e;
 }
 
 html {
@@ -17,4 +32,10 @@ html {
 
 html.dark {
   color-scheme: dark;
+}
+
+/* Pastel category tints stay as inline styles (server-driven slugs); in dark
+   mode they are gently muted so they sit well on the warm-brown background. */
+.dark .tinted {
+  filter: brightness(0.88) saturate(0.82);
 }

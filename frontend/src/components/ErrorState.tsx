@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
 interface ErrorStateProps {
   message?: string;
@@ -14,21 +14,18 @@ export default function ErrorState({
   return (
     <div
       role="alert"
-      className="flex flex-col items-center justify-center rounded-xl border border-dashed border-red-200 bg-red-50/50 px-6 py-20 text-center dark:border-red-900/50 dark:bg-red-950/20"
+      className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink-line/60 px-6 py-20 text-center"
     >
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-500 dark:bg-red-950/60 dark:text-red-400">
-        <AlertTriangle className="h-6 w-6" aria-hidden="true" />
-      </span>
-      <h2 className="mt-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        Couldn&apos;t load notes
+      <h2 className="font-serif text-xl font-bold text-ink dark:text-linen">
+        Oh no, a little hiccup
       </h2>
-      <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="mt-1.5 max-w-sm text-sm text-ink-soft dark:text-linen-soft">
         {message}
       </p>
       <button
         type="button"
         onClick={onRetry}
-        className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3.5 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+        className="mt-5 inline-flex h-10 items-center gap-1.5 rounded-full border border-ink-line bg-paper px-5 text-sm font-semibold text-ink transition-colors hover:bg-[#EFE3C8] dark:border-linen-soft/60 dark:bg-bark-soft dark:text-linen dark:hover:bg-[#46382a]"
       >
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
         Try again

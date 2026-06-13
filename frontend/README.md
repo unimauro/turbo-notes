@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Turbo Notes — Frontend
 
-## Getting Started
+Next.js 16 (App Router) + React 19 + Tailwind v4 + TanStack Query frontend,
+redesigned to match the official prototype: cream paper background, Playfair
+Display serif headings, Inter body, pastel category-tinted cards and original
+kawaii inline SVG illustrations (cactus, sleeping cat, boba cup).
 
-First, run the development server:
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `NEXT_PUBLIC_API_URL` (see `.env.example`) to point at the API; it
+defaults to `http://localhost:8000/api/v1`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test           # jest (51 tests)
+npm run lint       # eslint
+npm run build      # production build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## App structure
 
-## Learn More
+- `/signup` — "Yay, New Friend!" · `/login` — "Yay, You're Back!"
+- `/` — the board (protected; client-side redirect to `/login` without a token):
+  category sidebar with per-user note counts, masonry-style grid of
+  category-tinted cards, "+ New Note" pill.
+- Editor — fullscreen takeover with a category dropdown pill, an X to close
+  and **no save button**: changes are autosaved (debounced 800 ms; the note is
+  created on the first change, PATCHed afterwards, and pending changes are
+  flushed on close).
 
-To learn more about Next.js, take a look at the following resources:
+## Design decisions & assumptions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Delete affordance.** The prototype shows no delete UI. We kept deletion as
+  a small trash icon revealed on card hover (plus keyboard focus), guarded by
+  a confirm dialog styled to the cozy palette. This is an intentional,
+  documented extension — notes would otherwise be immortal.
+- **Search.** The prototype has no search box, so the UI doesn't render one.
+  The API's `?search=` support remains in the service layer
+  (`listNotes({ search })`) for future use.
+- **Blank titles.** Autosave creates drafts before a title exists, so empty
+  titles are allowed end-to-end; cards render "Untitled" as a placeholder.
+- **Category colors.** The API stores only a slug
+  (`coral|yellow|teal|lavender`); the palette mapping lives in
+  `src/lib/colors.ts`, so re-theming never needs a backend change.
+- **Dark mode.** Kept (it predates the redesign) but adapted: warm
+  dark-brown background with the same pastel cards, slightly muted via a
+  `filter` on `.tinted` elements. The toggle is a subtle corner button.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Auth & token storage tradeoff
 
-## Deploy on Vercel
+Tokens (simplejwt access + refresh) are kept in `localStorage` with an axios
+request interceptor adding the `Bearer` header and a response interceptor
+that, on a 401, attempts **one** refresh and replays the request — otherwise
+it clears tokens and redirects to `/login`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`localStorage` is readable by any script running on the page, so an XSS hole
+exposes tokens. The hardened alternative — `httpOnly` cookies — is immune to
+script reads but requires CSRF protection, same-site coordination and
+backend cookie issuance. For this exercise the API is a pure token-issuing
+DRF backend, so `localStorage` + short-lived access tokens is the pragmatic
+choice; swapping to cookies would only touch `src/lib/tokens.ts` and
+`src/services/api.ts`.

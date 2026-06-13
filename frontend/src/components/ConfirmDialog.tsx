@@ -12,7 +12,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-/** Destructive-action confirmation. Mount only while open. */
+/** Destructive-action confirmation, restyled to the cozy palette. Mount only while open. */
 export default function ConfirmDialog({
   title,
   description,
@@ -38,7 +38,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm dark:bg-black/50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -50,17 +50,17 @@ export default function ConfirmDialog({
         aria-labelledby="confirm-title"
         aria-describedby="confirm-description"
         onKeyDown={handleKeyDown}
-        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
+        className="w-full max-w-sm rounded-2xl border border-ink-line bg-cream p-6 shadow-xl dark:border-linen-soft/50 dark:bg-bark-soft"
       >
         <h2
           id="confirm-title"
-          className="text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+          className="font-serif text-lg font-bold text-ink dark:text-linen"
         >
           {title}
         </h2>
         <p
           id="confirm-description"
-          className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400"
+          className="mt-1.5 text-sm text-ink-soft dark:text-linen-soft"
         >
           {description}
         </p>
@@ -69,14 +69,14 @@ export default function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="h-9 rounded-lg border border-zinc-200 bg-white px-3.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="h-10 rounded-full border border-ink-line bg-paper px-4 text-sm font-semibold text-ink transition-colors hover:bg-[#EFE3C8] dark:border-linen-soft/60 dark:bg-bark dark:text-linen dark:hover:bg-[#46382a]"
           >
-            Cancel
+            Keep it
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="h-9 rounded-lg bg-red-600 px-3.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+            className="h-10 rounded-full bg-[#B4543E] px-4 text-sm font-semibold text-cream shadow-sm transition-colors hover:bg-[#9c4836] focus:outline-none focus:ring-2 focus:ring-[#B4543E]/40"
           >
             {confirmLabel}
           </button>
