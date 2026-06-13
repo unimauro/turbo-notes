@@ -1,0 +1,60 @@
+name: Deploy to VPS
+
+# Deploys the production stack to the VPS over SSH, the same way the other apps
+# on this server are deployed (CI/CD from GitHub's runners — no local access).
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   VPS_HOST            e.g. 217.15.168.100
+#   VPS_USER            e.g. root
+#   VPS_SSH_KEY         private SSH key with access to the VPS
+#   DJANGO_SECRET_KEY   long random string
+#   POSTGRES_PASSWORD   strong password
+#
+# Then point notes.cardenas.pe (DNS A record) at the VPS and add it in the
+# control panel as a proxy to 127.0.0.1:3100 with SSL.
+
+on:
+  workflow_dispatch: {}        # run manually from the Actions tab
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-vps.yml"
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            mkdir -p /opt && cd /opt
+            if [ ! -d turbo-notes/.git ]; then
+              git clone https://github.com/unimauro/turbo-notes.git
+            fi
+            cd turbo-notes
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+            cd deploy
+            cat > .env <<EOF
+            DOMAIN=notes.cardenas.pe
+            DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            EOF
+            chmod 600 .env
+            docker compose -p turbo-notes -f docker-compose.vps.yml --env-file .env up -d --build
+            docker compose -p turbo-notes -f docker-compose.vps.yml exec -T backend \
+              python manage.py seed_demo --force || true
+            sleep 5
+            curl -fsS -o /dev/null -w "local health: %{http_code}\n" http://127.0.0.1:3100/api/health
