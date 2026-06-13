@@ -121,6 +121,13 @@ docker compose up --build
 
 The backend waits for Postgres to be healthy, runs migrations automatically (including the category seed), then serves. No other steps.
 
+**Want sample data to explore?** Seed a demo user (`demo@turbo.ai` / `demo12345`) preloaded with notes:
+
+```bash
+docker compose exec backend python manage.py seed_demo
+# (local dev: python manage.py seed_demo)
+```
+
 ### Local development
 
 Backend (Python 3.12, defaults to SQLite — no database setup needed):
@@ -139,6 +146,12 @@ Frontend (Node 20):
 cd frontend
 npm install
 npm run dev                       # http://localhost:3000
+```
+
+Optionally seed a demo account with sample notes:
+
+```bash
+cd backend && python manage.py seed_demo   # demo@turbo.ai / demo12345
 ```
 
 ### Register and call the API from the command line
