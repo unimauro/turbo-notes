@@ -1,0 +1,14 @@
+# Automatic HTTPS via Let's Encrypt. DOMAIN comes from the environment.
+{$DOMAIN} {
+	encode gzip zstd
+
+	# API and docs go to Django; everything else to the Next.js app.
+	@backend path /api/* /admin/* /static/*
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

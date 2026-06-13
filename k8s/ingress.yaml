@@ -1,0 +1,30 @@
+# Routes one host to both tiers: /api -> backend, everything else -> frontend.
+# Assumes ingress-nginx + cert-manager (with a "letsencrypt" ClusterIssuer) installed.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: turbo-notes
+  namespace: turbo-notes
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [notes.cardenas.pe]
+      secretName: turbo-notes-tls
+  rules:
+    - host: notes.cardenas.pe
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port: { number: 8000 }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port: { number: 3000 }
