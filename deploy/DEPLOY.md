@@ -73,6 +73,33 @@ cd turbo-notes && git pull
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 ```
 
+## Behind an existing reverse proxy (e.g. a server-wide Caddy)
+
+If the server already runs Caddy on ports 80/443 fronting several apps, don't start the
+bundled Caddy. Use the loopback variant instead — it exposes the stack only on
+`127.0.0.1:3100`:
+
+```bash
+docker compose -p turbo-notes -f docker-compose.vps.yml --env-file .env up -d --build
+docker compose -p turbo-notes -f docker-compose.vps.yml exec backend python manage.py seed_demo --force
+```
+
+Then add one site block to the server's main `Caddyfile` and reload Caddy:
+
+```caddy
+notes.cardenas.pe {
+	reverse_proxy 127.0.0.1:3100
+}
+```
+
+```bash
+caddy reload --config /etc/caddy/Caddyfile   # or: systemctl reload caddy
+```
+
+Caddy obtains the TLS certificate automatically once `notes.cardenas.pe` resolves to the
+server. This is fully isolated from the other apps (own project name, network, volume,
+and a single loopback port).
+
 ## Notes
 
 - Postgres data persists in the `postgres_data` volume; certificates in `caddy_data`.
