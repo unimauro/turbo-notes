@@ -10,6 +10,7 @@ The guiding principle throughout: **the right amount of engineering for the scop
 - **Per-user notes** — every note has an owner; all notes endpoints require auth and are scoped to the requesting user (another user's note ids return 404, not 403 — no existence leaking).
 - **Categories** — four seeded categories (Random Thoughts · School · Personal · Drama), each note belongs to one; sidebar shows per-user note counts and filters the board (`?category=<id>` on the API).
 - **Autosave editor** — fullscreen takeover with **no save button**, matching the prototype: the note is created on the first keystroke, then PATCHed with an 800 ms debounce; pending changes flush on close (X). Changing category instantly recolors the card. Blank titles are allowed end-to-end (drafts exist before titles do).
+- **Voice to text** — dictate notes by mic: free in-browser Web Speech dictation out of the box, with optional **AI (Whisper) transcription** when an `OPENAI_API_KEY` is set (OpenAI-compatible, works with Groq too); the app falls back to free browser dictation when no key is configured — see [AI transcription](#ai-transcription-whisper)
 - Notes CRUD — list, create, edit, delete (hover trash icon + confirmation)
 - Pagination (12 per page, client-tunable up to 100) and ordering (default `-updated_at`)
 - `?search=` over title and content remains on the API (the prototype shows no search box, so the UI doesn't render one — see Design fidelity)
@@ -189,29 +190,43 @@ Documented in `backend/.env.example` and `frontend/.env.example`; both apps run 
 | `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS` | backend | Standard Django toggles |
 | `CORS_ALLOWED_ORIGINS` | backend | The frontend origin (`http://localhost:3000`) |
 | `NEXT_PUBLIC_API_URL` | frontend | API base URL — inlined at **build time** by Next.js, which is why docker-compose passes it as a build arg, not a runtime env |
+| `OPENAI_API_KEY` | backend | **Optional.** API key for AI (Whisper) transcription. Unset → feature off, app falls back to free browser dictation. |
+| `OPENAI_BASE_URL` | backend | Transcription provider base URL. Default `https://api.openai.com/v1`; set to `https://api.groq.com/openai/v1` for Groq. |
+| `WHISPER_MODEL` | backend | Transcription model. Default `whisper-1` (OpenAI); use `whisper-large-v3` for Groq. |
+
+### AI transcription (Whisper)
+
+The editor's mic supports **two voice-to-text paths**, and the app works fully **with no API key**:
+
+- **Free, always-on:** in-browser dictation via the Web Speech API (no keys, no backend) — plus a "read aloud" button via `speechSynthesis`.
+- **AI transcription (optional):** when `OPENAI_API_KEY` is configured, the mic instead records audio in the browser (`MediaRecorder`) and uploads it to `POST /api/v1/transcribe/`, which proxies an **OpenAI-compatible** Whisper endpoint and returns the transcript; the text is appended to the note through the same smart-spacing + autosave path as live dictation.
+
+**How the fallback is decided:** on open, the editor calls `GET /api/v1/transcribe/` once (`{"enabled": <bool>}`, derived from `TRANSCRIPTION_ENABLED = bool(OPENAI_API_KEY)`). If transcription is enabled **and** the browser supports `MediaRecorder`, the mic records for Whisper; otherwise it uses the free Web Speech dictation. Any runtime failure (mic permission denied, upstream error) also falls back to Web Speech when available. The backend returns `503 {"detail": "Transcription is not configured"}` if `POST`ed without a key, and never leaks the key on upstream errors (`502`).
+
+Because the endpoint is **OpenAI-compatible**, it works unchanged with OpenAI or with Groq — just point `OPENAI_BASE_URL` at the provider and set the matching `WHISPER_MODEL`. *(Honest framing: this is a thin proxy over a third-party Whisper API; the transcription quality is the provider's, not ours.)*
 
 ## Testing
 
-Backend — **77 tests, 100% coverage** on `apps/` (target was ≥85%):
+Backend — **94 tests, 100% coverage** on `apps/` (target was ≥85%):
 
 ```bash
 cd backend && source .venv/bin/activate
-pytest --cov=apps --cov-report=term    # 77 passed
+pytest --cov=apps --cov-report=term    # 94 passed
 flake8 && black --check . && isort --check-only .
 ```
 
 Coverage spans models (category seed order, PROTECT on category, CASCADE on owner, blank titles), serializers (default category, `category_id` writes, unknown category → 400, output shape), the full API surface — a 401 matrix for every unauthenticated endpoint, per-user scoping (reading/patching/deleting another user's note → 404), category filtering including non-numeric params, per-user category counts, plus all the original CRUD/pagination/search/ordering tests now auth-aware — and auth itself: register shape, email lowercasing, case-insensitive duplicates, weak-password rejection, token obtain/refresh, wrong credentials, and an end-to-end Bearer round trip.
 
-Frontend — **51 tests, 10 suites**:
+Frontend — **58 tests, 11 suites**:
 
 ```bash
 cd frontend
-npm test          # 51 passed
+npm test          # 58 passed
 npm run lint      # 0 problems
 npm run build     # must pass (CI enforces it)
 ```
 
-Suites cover the optimistic create/update/delete flows with rollback in `useNotes`, the axios interceptor refresh flow (one refresh then replay; clear + redirect on failure), the auth service, `NoteEditor` autosave with fake timers (debounce, flush-on-close, category save), `CategorySidebar` counts and filtering, date helpers, `NoteCard`/`EmptyState`, `useDebounce`, and the notes service layer.
+Suites cover the optimistic create/update/delete flows with rollback in `useNotes`, the axios interceptor refresh flow (one refresh then replay; clear + redirect on failure), the auth service, `NoteEditor` autosave with fake timers (debounce, flush-on-close, category save, and graceful operation when AI transcription is disabled/unsupported), the transcription service layer, `CategorySidebar` counts and filtering, date helpers, `NoteCard`/`EmptyState`, `useDebounce`, and the notes service layer.
 
 CI runs both jobs on every push and PR to `main` (lint + tests with a coverage floor for the backend; lint + tests + production build for the frontend).
 
@@ -230,6 +245,8 @@ All `/notes/` and `/categories/` endpoints require `Authorization: Bearer <acces
 | POST | `/api/v1/notes/` | ✔ | Create. Body: `{title?, content?, category_id?}`. Title optional/blank (autosave drafts); category defaults to Random Thoughts; unknown `category_id` → 400. Returns 201 with nested `category` `{id, name, color}`. |
 | GET / PATCH / PUT / DELETE | `/api/v1/notes/{id}/` | ✔ | Retrieve / update / delete your note. Another user's id → 404. |
 | GET | `/api/v1/categories/` | ✔ | Plain array (not paginated) of the 4 seeded categories with `note_count` computed **for the requesting user**. |
+| GET | `/api/v1/transcribe/` | — | AI transcription availability: `{"enabled": <bool>}` (frontend uses it to pick Whisper vs. free Web Speech). |
+| POST | `/api/v1/transcribe/` | ✔ | Multipart `audio` file → `{"text": "..."}` via an OpenAI-compatible Whisper API. `503` if no key configured; `400` on missing/oversized/unsupported audio; `502` on upstream error. |
 | GET | `/api/health` | — | Liveness probe (no DB access). |
 
 Validation errors return DRF's structured 400 shape, e.g. `{"email": ["A user with this email already exists."]}` — which the frontend surfaces inline.
@@ -246,7 +263,7 @@ I built this project with agentic LLM coding tools as a force multiplier, and I 
 
 **Workflow:** I worked from a written brief plus a frame-by-frame design spec of the prototype video as the single source of truth, ran specialized agent sessions for backend and frontend with explicit quality gates (tests green, lint clean, build passing — verified by actually running them, not by assertion), and reviewed the output against the spec before integration. Where the two halves had to agree — the auth contract, the category slug palette, the pagination envelope, CORS, the build-time inlining of `NEXT_PUBLIC_API_URL` — I verified the contract on both sides myself, including an end-to-end curl smoke test of register → token → create → filter.
 
-**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 77 + 51 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
+**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 94 + 58 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
 
 ## Scalability considerations
 
