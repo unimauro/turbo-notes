@@ -13,6 +13,7 @@ def health(_request):
 urlpatterns = [
     path("api/v1/", include("apps.users.urls")),
     path("api/v1/", include("apps.notes.urls")),
+    path("api/v1/", include("apps.transcription.urls")),
     path("api/health", health, name="health"),
     path("api/schema", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     # Local
     "apps.users",
     "apps.notes",
+    "apps.transcription",
 ]
 
 MIDDLEWARE = [
@@ -133,3 +134,19 @@ SIMPLE_JWT = {
 # --- CORS -------------------------------------------------------------------
 
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+
+# --- AI transcription (Whisper) ---------------------------------------------
+# OpenAI-compatible audio transcription. Works with OpenAI or any compatible
+# endpoint (e.g. Groq: OPENAI_BASE_URL=https://api.groq.com/openai/v1 with
+# WHISPER_MODEL=whisper-large-v3). When OPENAI_API_KEY is unset the feature is
+# disabled and the frontend falls back to free in-browser Web Speech dictation.
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "whisper-1").strip()
+
+# True only when an API key is configured; gates the /transcribe/ endpoint.
+TRANSCRIPTION_ENABLED = bool(OPENAI_API_KEY)
+
+# Reject uploads larger than this (matches OpenAI's 25MB Whisper limit).
+TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024
