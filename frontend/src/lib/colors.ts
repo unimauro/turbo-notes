@@ -14,10 +14,17 @@ export interface CategoryPalette {
  * the palette, so a re-theme never needs a database migration.
  */
 export const CATEGORY_COLORS: Record<CategorySlug, CategoryPalette> = {
-  coral: { dot: "#E08D63", bg: "#F4B88F", border: "#D98E63" },
-  yellow: { dot: "#E3C96E", bg: "#F8E5A3", border: "#E3C96E" },
-  teal: { dot: "#6FA890", bg: "#9BC6B5", border: "#6FA890" },
-  lavender: { dot: "#B49BD6", bg: "#DCCDEF", border: "#B49BD6" },
+  // Random Thoughts
+  coral: { dot: "#E0875A", bg: "#EFC2A1", border: "#D98E63" },
+  // School
+  yellow: { dot: "#E6C56A", bg: "#F6E3A6", border: "#E0C56A" },
+  // Personal
+  teal: { dot: "#7FA99B", bg: "#A9C6B9", border: "#88B0A1" },
+  // Drama. The backend stores this category's color as the slug "lavender"
+  // (apps/notes/models.py Color.LAVENDER), but the Figma renders Drama as an
+  // OLIVE-GREEN. We map the existing "lavender" slug to the green palette here
+  // so no DB migration is needed — the frontend owns the palette.
+  lavender: { dot: "#A9B57E", bg: "#D6DCC1", border: "#AEBA86" },
 };
 
 const FALLBACK: CategoryPalette = CATEGORY_COLORS.coral;

@@ -31,18 +31,22 @@ function errorMessage(err: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+// Each screen has ONE centered illustration above the heading (per Figma):
+// sign-up shows the sleeping cat, login shows the cactus.
 const COPY = {
   signup: {
     heading: "Yay, New Friend!",
     button: "Sign Up",
     crossText: "We're already friends!",
     crossHref: "/login",
+    Illustration: KawaiiCat,
   },
   login: {
     heading: "Yay, You're Back!",
     button: "Login",
     crossText: "Oops! I've never been here before",
     crossHref: "/signup",
+    Illustration: KawaiiCactus,
   },
 } as const;
 
@@ -51,6 +55,7 @@ const inputClass =
 
 export default function AuthScreen({ mode }: AuthScreenProps) {
   const copy = COPY[mode];
+  const Illustration = copy.Illustration;
   const router = useRouter();
   const { ready, isAuthenticated, login } = useAuth();
 
@@ -94,6 +99,8 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         className="flex w-full max-w-xs flex-col items-stretch gap-4"
         aria-label={copy.heading}
       >
+        <Illustration className="mx-auto h-24 w-24 sm:h-28 sm:w-28" />
+
         <h1 className="mb-4 text-center font-serif text-4xl font-bold text-ink dark:text-linen">
           {copy.heading}
         </h1>
@@ -161,9 +168,6 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
           {copy.crossText}
         </Link>
       </form>
-
-      <KawaiiCactus className="pointer-events-none absolute -left-2 bottom-0 h-32 w-28 sm:left-8 sm:h-40 sm:w-36" />
-      <KawaiiCat className="pointer-events-none absolute -right-4 bottom-0 h-24 w-40 sm:right-8 sm:h-28 sm:w-48" />
     </main>
   );
 }

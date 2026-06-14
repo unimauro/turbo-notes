@@ -13,11 +13,11 @@
   --font-serif: var(--font-playfair), Georgia, "Times New Roman", serif;
 
   /* Cozy palette */
-  --color-cream: #faf1e3; /* app background */
+  --color-cream: #faf1e2; /* app background — warm cream (Figma) */
   --color-paper: #f7efdc; /* buttons / inputs */
-  --color-ink: #6b5638; /* headings, strong text */
-  --color-ink-soft: #5c5347; /* body text */
-  --color-ink-line: #8b7355; /* 1px borders */
+  --color-ink: #6a5a3c; /* headings, serif brown (Figma) */
+  --color-ink-soft: #3d3527; /* body text — dark (Figma) */
+  --color-ink-line: #8b7355; /* 1px borders — input/button brown (Figma) */
 
   /* Dark mode: warm brown, same pastel cards slightly muted */
   --color-bark: #2b2118; /* dark app background */
@@ -38,4 +38,44 @@ html.dark {
    mode they are gently muted so they sit well on the warm-brown background. */
 .dark .tinted {
   filter: brightness(0.88) saturate(0.82);
+}
+
+/* Voice-dictation pill: an animated equaliser waveform of small bars that
+   bounce on a staggered loop, plus a gently pulsing "live" dot. */
+@keyframes wave-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.dictation-bar {
+  transform-origin: center;
+  animation: wave-bounce 1s ease-in-out infinite;
+}
+
+.dictation-dot {
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictation-bar,
+  .dictation-dot {
+    animation: none;
+  }
 }

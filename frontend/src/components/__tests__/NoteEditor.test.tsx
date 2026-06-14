@@ -12,6 +12,13 @@ jest.mock("@/services/notes", () => ({
   deleteNote: jest.fn(),
 }));
 
+// AI transcription is disabled by default in these tests (no MediaRecorder in
+// jsdom anyway); the editor must fall back to Web Speech / plain editing.
+jest.mock("@/services/transcription", () => ({
+  getTranscriptionEnabled: jest.fn().mockResolvedValue(false),
+  transcribeAudio: jest.fn(),
+}));
+
 import NoteEditor, { AUTOSAVE_DELAY_MS } from "@/components/NoteEditor";
 import { createNote, updateNote } from "@/services/notes";
 import type { Category, Note } from "@/types/note";
@@ -149,6 +156,81 @@ describe("NoteEditor autosave", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(createNoteMock).not.toHaveBeenCalled();
     expect(updateNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("hides the dictate (mic) button when SpeechRecognition is unsupported", () => {
+    // jsdom exposes no SpeechRecognition/webkitSpeechRecognition, so the mic
+    // button must not render — and the editor must still render normally.
+    renderEditor(savedNote);
+
+    expect(
+      screen.queryByRole("button", { name: /dictate note/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Note Title")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Pour your heart out..."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the dictate (mic) button when SpeechRecognition is available", () => {
+    const recogInstances: Array<{ start: jest.Mock; abort: jest.Mock }> = [];
+    class FakeRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onresult: unknown = null;
+      onerror: unknown = null;
+      onend: unknown = null;
+      onstart: unknown = null;
+      start = jest.fn();
+      stop = jest.fn();
+      abort = jest.fn();
+      constructor() {
+        recogInstances.push(this);
+      }
+    }
+    (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition =
+      FakeRecognition;
+    try {
+      renderEditor(savedNote);
+      expect(
+        screen.getByRole("button", { name: /dictate note/i }),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /dictate note/i }));
+      // Recognition started and the active-recording "Stop dictation" pill shows.
+      expect(recogInstances).toHaveLength(1);
+      expect(recogInstances[0].start).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("button", { name: /stop dictation/i }),
+      ).toBeInTheDocument();
+    } finally {
+      delete (window as unknown as { SpeechRecognition?: unknown })
+        .SpeechRecognition;
+    }
+  });
+
+  it("still edits and autosaves when AI transcription is disabled/unsupported", async () => {
+    // getTranscriptionEnabled resolves false (mocked above) and jsdom has no
+    // MediaRecorder, so the AI mic path is off — the editor must work normally.
+    createNoteMock.mockResolvedValue(savedNote);
+    renderEditor(null);
+
+    fireEvent.change(screen.getByPlaceholderText("Pour your heart out..."), {
+      target: { value: "typed by hand" },
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(AUTOSAVE_DELAY_MS);
+    });
+
+    expect(createNoteMock).toHaveBeenCalledTimes(1);
+    expect(createNoteMock).toHaveBeenCalledWith({
+      title: "",
+      content: "typed by hand",
+      category_id: 1,
+    });
+    // No "transcribing" indicator should ever appear in this mode.
+    expect(screen.queryByText(/transcribing/i)).not.toBeInTheDocument();
   });
 
   it("changing the category schedules a save too", async () => {
