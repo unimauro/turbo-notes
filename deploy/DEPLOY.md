@@ -77,7 +77,7 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --
 
 If the server already runs Caddy on ports 80/443 fronting several apps, don't start the
 bundled Caddy. Use the loopback variant instead — it exposes the stack only on
-`127.0.0.1:3100`:
+`127.0.0.1:3300`:
 
 ```bash
 docker compose -p turbo-notes -f docker-compose.vps.yml --env-file .env up -d --build
@@ -88,7 +88,7 @@ Then add one site block to the server's main `Caddyfile` and reload Caddy:
 
 ```caddy
 notes.cardenas.pe {
-	reverse_proxy 127.0.0.1:3100
+	reverse_proxy 127.0.0.1:3300
 }
 ```
 

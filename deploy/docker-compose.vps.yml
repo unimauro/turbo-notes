@@ -1,9 +1,9 @@
 # Deployment for a server where a control panel (HestiaCP) already owns ports
 # 80/443 and TLS (e.g. the same box running other apps).
 #
-# This stack exposes ONLY a single loopback port (127.0.0.1:3100); nothing binds
+# This stack exposes ONLY a single loopback port (127.0.0.1:3300); nothing binds
 # to 80/443 and nothing is reachable from the public internet directly. You then
-# point the panel's domain (notes.cardenas.pe) at 127.0.0.1:3100 with SSL.
+# point the panel's domain (notes.cardenas.pe) at 127.0.0.1:3300 with SSL.
 #
 # It is isolated from anything else on the box: own project name, own network,
 # own named volume, no host ports except the loopback proxy.
@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
     # Loopback only — the panel proxies the public domain here.
     ports:
-      - "127.0.0.1:3100:3100"
+      - "127.0.0.1:3300:3300"
     volumes:
       - ./Caddyfile.vps:/etc/caddy/Caddyfile:ro
     depends_on:

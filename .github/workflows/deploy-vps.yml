@@ -11,7 +11,7 @@ name: Deploy to VPS
 #   POSTGRES_PASSWORD   strong password
 #
 # Then point notes.cardenas.pe (DNS A record) at the VPS and add it in the
-# control panel as a proxy to 127.0.0.1:3100 with SSL.
+# control panel as a proxy to 127.0.0.1:3300 with SSL.
 
 on:
   workflow_dispatch: {}        # run manually from the Actions tab
@@ -57,14 +57,14 @@ jobs:
             docker compose -p turbo-notes -f docker-compose.vps.yml exec -T backend \
               python manage.py seed_demo --force || true
             sleep 5
-            curl -fsS -o /dev/null -w "local health: %{http_code}\n" http://127.0.0.1:3100/api/health
+            curl -fsS -o /dev/null -w "local health: %{http_code}\n" http://127.0.0.1:3300/api/health
 
             # Wire notes.cardenas.pe into the server-wide Caddy (idempotent + safe:
             # validate before reload so a bad edit never takes down other sites).
             CADDYFILE=/etc/caddy/Caddyfile
             if [ -f "$CADDYFILE" ]; then
               if ! grep -q "notes.cardenas.pe" "$CADDYFILE"; then
-                printf '\nnotes.cardenas.pe {\n\treverse_proxy 127.0.0.1:3100\n}\n' >> "$CADDYFILE"
+                printf '\nnotes.cardenas.pe {\n\treverse_proxy 127.0.0.1:3300\n}\n' >> "$CADDYFILE"
                 echo "Added Caddy site block for notes.cardenas.pe"
               else
                 echo "Caddy block already present"

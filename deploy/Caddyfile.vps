@@ -6,7 +6,7 @@
 	admin off
 }
 
-:3100 {
+:3300 {
 	encode gzip
 	@backend path /api/* /admin/* /static/*
 	handle @backend {
