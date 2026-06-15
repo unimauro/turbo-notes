@@ -279,4 +279,51 @@ describe("NoteEditor autosave", () => {
       category_id: 4,
     });
   });
+
+  it("a category change after a content edit keeps the edited content", async () => {
+    // Field handlers must build the payload from the authoritative snapshot, not
+    // the stale render closure, so picking a category can't revert content.
+    updateNoteMock.mockResolvedValue(savedNote);
+    renderEditor(savedNote);
+
+    fireEvent.change(screen.getByPlaceholderText("Pour your heart out..."), {
+      target: { value: "fresh body" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /random thoughts/i }));
+    fireEvent.click(screen.getByRole("option", { name: /drama/i }));
+
+    await act(async () => {
+      jest.advanceTimersByTime(AUTOSAVE_DELAY_MS);
+    });
+
+    const lastCall = updateNoteMock.mock.calls.at(-1);
+    expect(lastCall).toEqual([
+      42,
+      { title: "Hi", content: "fresh body", category_id: 4 },
+    ]);
+  });
+
+  it("keeps the editor open and surfaces an error when the final save fails", async () => {
+    // The last flush on close rejects; we must NOT unmount (data loss) and must
+    // show an error so the user can retry.
+    updateNoteMock.mockRejectedValue(new Error("network down"));
+    const onClose = renderEditor(savedNote);
+
+    fireEvent.change(screen.getByPlaceholderText("Pour your heart out..."), {
+      target: { value: "must not be lost" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/couldn't save/i);
+    // The user's text is still in the textarea.
+    expect(screen.getByPlaceholderText("Pour your heart out...")).toHaveValue(
+      "must not be lost",
+    );
+  });
 });

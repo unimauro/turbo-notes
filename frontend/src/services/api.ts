@@ -47,6 +47,33 @@ function redirectToLogin(): void {
 }
 
 /**
+ * A single, shared in-flight refresh promise. Concurrent 401s must NOT each
+ * kick off their own token refresh; instead they all await this one promise and
+ * replay once it settles. Reset to null on settle so a later 401 can refresh
+ * again.
+ */
+let refreshInFlight: Promise<string> | null = null;
+
+function refreshAccessToken(refresh: string): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = axios
+      .post<{ access: string }>(
+        `${API_BASE_URL}/auth/token/refresh/`,
+        { refresh },
+        { headers: { "Content-Type": "application/json" } },
+      )
+      .then(({ data }) => {
+        setAccessToken(data.access);
+        return data.access;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+/**
  * Response interceptor: on 401, try ONE token refresh and replay the request.
  * If the refresh fails (or there is no refresh token), clear everything and
  * send the user back to the login screen.
@@ -70,14 +97,10 @@ export async function handleResponseError(error: unknown): Promise<unknown> {
 
   config._retried = true;
   try {
-    // Bare axios call: must not run through these interceptors again.
-    const { data } = await axios.post<{ access: string }>(
-      `${API_BASE_URL}/auth/token/refresh/`,
-      { refresh },
-      { headers: { "Content-Type": "application/json" } },
-    );
-    setAccessToken(data.access);
-    config.headers.Authorization = `Bearer ${data.access}`;
+    // Bare axios call (must not run through these interceptors again), shared
+    // across all concurrent 401s so at most one refresh runs at a time.
+    const access = await refreshAccessToken(refresh);
+    config.headers.Authorization = `Bearer ${access}`;
     return api(config);
   } catch {
     redirectToLogin();

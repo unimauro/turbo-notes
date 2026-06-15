@@ -109,6 +109,50 @@ describe("handleResponseError", () => {
     expect(result).toEqual({ data: "replayed" });
   });
 
+  it("runs only ONE refresh for concurrent 401s and replays both", async () => {
+    setTokens({ access: "stale", refresh: "ref-token" });
+
+    // A deferred refresh so both 401s overlap on the same in-flight promise.
+    let resolveRefresh: (v: { data: { access: string } }) => void = () => {};
+    rootPost.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+    apiCallable
+      .mockResolvedValueOnce({ data: "replay-A" })
+      .mockResolvedValueOnce({ data: "replay-B" });
+
+    const pA = handleResponseError(make401("/notes/"));
+    const pB = handleResponseError(make401("/categories/"));
+
+    // Let both handlers reach their await before the refresh settles.
+    await Promise.resolve();
+    resolveRefresh({ data: { access: "fresh" } });
+
+    const [rA, rB] = await Promise.all([pA, pB]);
+
+    // Exactly one network refresh despite two concurrent 401s.
+    expect(rootPost).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBe("fresh");
+    expect(rA).toEqual({ data: "replay-A" });
+    expect(rB).toEqual({ data: "replay-B" });
+  });
+
+  it("allows a fresh refresh on a later 401 (in-flight promise resets)", async () => {
+    setTokens({ access: "stale", refresh: "ref-token" });
+    rootPost
+      .mockResolvedValueOnce({ data: { access: "fresh-1" } })
+      .mockResolvedValueOnce({ data: { access: "fresh-2" } });
+    apiCallable.mockResolvedValue({ data: "ok" });
+
+    await handleResponseError(make401("/notes/"));
+    await handleResponseError(make401("/notes/"));
+
+    expect(rootPost).toHaveBeenCalledTimes(2);
+    expect(getAccessToken()).toBe("fresh-2");
+  });
+
   it("does not retry a request that was already retried", async () => {
     setTokens({ access: "stale", refresh: "ref-token" });
 

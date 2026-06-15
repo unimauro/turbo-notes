@@ -60,6 +60,9 @@ export default function NoteEditor({
   );
   const [openedAt] = useState(() => new Date().toISOString());
   const [speaking, setSpeaking] = useState(false);
+  // Surfaced when the final flush on close fails; we keep the editor open so the
+  // user doesn't lose their last edit.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Derived (no effect needed): user pick > note's category > seeded default.
   const category =
@@ -83,12 +86,16 @@ export default function NoteEditor({
     category: CategoryRef | undefined;
   }>({ title: note?.title ?? "", content: note?.content ?? "", category });
 
-  const flush = useCallback(async (): Promise<void> => {
+  // Resolves to `true` when everything is persisted, `false` if a save failed
+  // and a dirty change remains (so callers like handleClose can react).
+  const flush = useCallback(async (): Promise<boolean> => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (busyRef.current) return; // the running loop below picks up new changes
+    // A loop is already running; it will pick up the latest changes. We can't
+    // know its outcome here, so report the current dirty state optimistically.
+    if (busyRef.current) return !dirtyRef.current;
 
     busyRef.current = true;
     try {
@@ -126,6 +133,7 @@ export default function NoteEditor({
     } finally {
       busyRef.current = false;
     }
+    return !dirtyRef.current;
   }, [createMutation, updateMutation]);
 
   const scheduleSave = useCallback(
@@ -149,11 +157,28 @@ export default function NoteEditor({
     [],
   );
 
-  function handleClose() {
+  const closingRef = useRef(false);
+  async function handleClose() {
+    if (closingRef.current) return; // ignore double-clicks while flushing
+    closingRef.current = true;
     dictationStopRef.current?.(); // end any in-flight recognition first
     stopPlaybackRef.current?.(); // and any in-flight read-aloud playback
-    void flush(); // mutations outlive the unmount via the query client
-    onClose();
+    let ok = false;
+    try {
+      // Await the final flush: if the last save rejects we must NOT unmount, or
+      // the pending edit is lost silently.
+      ok = await flush();
+    } catch {
+      ok = false;
+    }
+    closingRef.current = false;
+    if (ok) {
+      setSaveError(null);
+      onClose();
+    } else {
+      // Keep the editor open so the user can retry; their text is still here.
+      setSaveError("Couldn't save your changes. Please try again.");
+    }
   }
 
   // Lets handleClose() (declared before the speak logic) stop read-aloud audio.
@@ -239,8 +264,18 @@ export default function NoteEditor({
       synth.cancel(); // clear any queued utterance from a prior note
       const voices = await loadVoices(synth);
       const utterance = speakWithBrowser(synth, text, pickVoice(voices));
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
+      // Watchdog: if no voice resolves, onstart/onend/onerror may never fire and
+      // the headphones button stays stuck in "speaking". Bail out after 2s.
+      const g = setTimeout(() => setSpeaking(false), 2000);
+      utterance.onstart = () => clearTimeout(g);
+      utterance.onend = () => {
+        clearTimeout(g);
+        setSpeaking(false);
+      };
+      utterance.onerror = () => {
+        clearTimeout(g);
+        setSpeaking(false);
+      };
     },
     [speechSupported],
   );
@@ -295,6 +330,11 @@ export default function NoteEditor({
     void speakWithBrowserVoice(text);
   }
 
+  // ---- AI transcription state (declared early so dictation handlers can clear
+  // a stale error and flip the capture mode). ------------------------------
+  const [whisperEnabled, setWhisperEnabled] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
+
   // ---- Voice dictation (Web Speech API — free, no keys/backend) -----------
   // Final transcript chunks are appended to the note's content with sensible
   // spacing, then handed to the existing autosave via scheduleSave. We append
@@ -303,13 +343,20 @@ export default function NoteEditor({
   // closure; React state is then synced from that authoritative value.
   const appendDictation = useCallback(
     (text: string) => {
-      const current = latestRef.current.content;
+      const snapshot = latestRef.current;
+      const current = snapshot.content;
       const sep = current.length === 0 || /\s$/.test(current) ? "" : " ";
       const next = current + sep + text;
       setContent(next);
-      scheduleSave({ title: latestRef.current.title, content: next, category });
+      // A working append means any prior transcribe error is stale; clear it.
+      setTranscribeError(null);
+      scheduleSave({
+        title: snapshot.title,
+        content: next,
+        category: snapshot.category,
+      });
     },
-    [scheduleSave, category],
+    [scheduleSave],
   );
 
   const dictation = useDictation({ onFinalTranscript: appendDictation });
@@ -319,16 +366,22 @@ export default function NoteEditor({
   // editor opens whether Whisper is available (GET /transcribe/). If the check
   // fails or it's disabled/unsupported, we use the free Web Speech dictation
   // above. On any Whisper failure mid-use we also fall back to Web Speech.
-  const [whisperEnabled, setWhisperEnabled] = useState(false);
-  const [transcribeError, setTranscribeError] = useState<string | null>(null);
-
   const dictationSupported = dictation.supported;
   const dictationStart = dictation.start;
   const handleWhisperError = useCallback(
     (message: string) => {
-      setTranscribeError(message);
-      // Fall back to Web Speech dictation if the browser supports it.
-      if (dictationSupported) dictationStart();
+      // Fall back to Web Speech dictation if the browser supports it. Flipping
+      // whisperEnabled off keeps every whisperEnabled-gated branch (recording,
+      // micAvailable, toggleDictation, Escape) on the dictation path so they
+      // stay in sync with the actual capture mode.
+      if (dictationSupported) {
+        setWhisperEnabled(false);
+        // The fallback is working now, so don't leave a stale error lingering.
+        setTranscribeError(null);
+        dictationStart();
+      } else {
+        setTranscribeError(message);
+      }
     },
     [dictationSupported, dictationStart],
   );
@@ -460,8 +513,15 @@ export default function NoteEditor({
                         onClick={() => {
                           setPickedCategory(c);
                           setMenuOpen(false);
-                          // Recolors instantly, persists shortly after.
-                          scheduleSave({ title, content, category: c });
+                          // Recolors instantly, persists shortly after. Merge
+                          // onto the authoritative snapshot so we don't clobber
+                          // title/content appended via latestRef (dictation).
+                          const snapshot = latestRef.current;
+                          scheduleSave({
+                            title: snapshot.title,
+                            content: snapshot.content,
+                            category: c,
+                          });
                         }}
                         className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-ink/10 dark:text-linen dark:hover:bg-linen/10"
                       >
@@ -510,8 +570,16 @@ export default function NoteEditor({
           type="text"
           value={title}
           onChange={(e) => {
-            setTitle(e.target.value);
-            scheduleSave({ title: e.target.value, content, category });
+            const value = e.target.value;
+            setTitle(value);
+            // Merge onto the authoritative snapshot so we never clobber content
+            // just appended by dictation/Whisper (which write via latestRef).
+            const snapshot = latestRef.current;
+            scheduleSave({
+              title: value,
+              content: snapshot.content,
+              category: snapshot.category,
+            });
           }}
           placeholder="Note Title"
           className="mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none"
@@ -524,8 +592,16 @@ export default function NoteEditor({
           id="editor-content"
           value={content}
           onChange={(e) => {
-            setContent(e.target.value);
-            scheduleSave({ title, content: e.target.value, category });
+            const value = e.target.value;
+            setContent(value);
+            // Merge onto the authoritative snapshot so a stale title from this
+            // render closure can't overwrite a sibling field.
+            const snapshot = latestRef.current;
+            scheduleSave({
+              title: snapshot.title,
+              content: value,
+              category: snapshot.category,
+            });
           }}
           placeholder="Pour your heart out..."
           className="mt-5 w-full flex-1 resize-none bg-transparent text-base leading-relaxed text-ink-soft placeholder:text-ink/35 focus:outline-none"
@@ -555,6 +631,15 @@ export default function NoteEditor({
             className="pointer-events-none absolute bottom-20 right-5 max-w-[70%] text-right text-sm text-red-600 sm:bottom-24 sm:right-7 dark:text-red-400"
           >
             {transcribeError}
+          </p>
+        )}
+
+        {saveError && (
+          <p
+            role="alert"
+            className="absolute bottom-20 left-5 max-w-[70%] text-left text-sm text-red-600 sm:bottom-24 sm:left-7 dark:text-red-400"
+          >
+            {saveError}
           </p>
         )}
 
