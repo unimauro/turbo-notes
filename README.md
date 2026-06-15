@@ -4,6 +4,10 @@ A production-quality notes application built for the Turbo AI Senior Full Stack 
 
 The guiding principle throughout: **the right amount of engineering for the scope** — clean layering, full test coverage, and documented tradeoffs, without inventing complexity the problem doesn't have.
 
+> **🔴 Live demo:** **[notes.cardenas.pe](https://notes.cardenas.pe)** — sign up, or log in with `demo@turbo.ai` / `demo12345` (backup: `demo2@turbo.ai` / `demo12345`). Each demo account is preloaded with sample notes.
+>
+> **AI:** the editor dictates by voice — **OpenAI Whisper** when a key is configured (it is, on the live demo), falling back to free in-browser dictation otherwise.
+
 ## Features
 
 - **Auth** — email + password sign-up ("Yay, New Friend!") and login ("Yay, You're Back!") backed by JWT (simplejwt): register, token obtain, token refresh. Signup auto-logs-in.
@@ -32,19 +36,86 @@ The guiding principle throughout: **the right amount of engineering for the scop
 
 ## Architecture
 
+### System at a glance
+
+```mermaid
+flowchart TD
+    subgraph Client["Client · browser"]
+        UI["Next.js 16 SPA<br/>React · TanStack Query · TypeScript"]
+    end
+    CADDY["Caddy<br/>HTTPS · routes / → web, /api → API"]
+    subgraph Server["Server"]
+        WEB["Next.js standalone server :3000"]
+        API["Django 5 + DRF :8000<br/>JWT auth · owner-scoped ViewSet"]
+        DB[("PostgreSQL 16")]
+    end
+    WHISPER["OpenAI Whisper API<br/>optional · AI transcription"]
+
+    UI -->|HTTPS| CADDY
+    CADDY -->|"/"| WEB
+    CADDY -->|"/api/v1 · JWT Bearer"| API
+    API --> DB
+    API -.->|"audio → text"| WHISPER
 ```
-Browser
-  │  (axios + interceptors: Bearer header, one-shot 401 refresh→replay)
-  ▼
-Next.js 16 (App Router, standalone server, :3000)
-  │  REST over HTTP — http://localhost:8000/api/v1  (JWT Bearer)
-  ▼
-Django 5 + DRF (gunicorn, :8000)
-  │  apps/users  → register + token endpoints (simplejwt)
-  │  apps/notes  → NoteViewSet (owner-scoped) · CategoryListView (annotated counts)
-  ▼
-PostgreSQL 16 (docker) / SQLite (local dev & tests)
+
+The backend is **API-first**: a versioned REST API (`/api/v1`) with OpenAPI docs at `/api/docs`. The Next.js client is one consumer of it; a native mobile app could be another without backend changes. SQLite is used for local dev and tests; PostgreSQL in Docker and in production.
+
+### Autosave request flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Editor as NoteEditor (React)
+    participant Axios as axios + interceptors
+    participant API as Django /api/v1/notes
+    participant DB as PostgreSQL
+
+    User->>Editor: first keystroke
+    Editor->>Axios: POST /notes (create)
+    Axios->>API: + Bearer access token
+    API->>DB: INSERT (owner = request.user)
+    API-->>Editor: 201 note
+    loop each change · debounced 800 ms
+        User->>Editor: edits title / content
+        Editor->>API: PATCH /notes/:id
+    end
+    Note over Axios,API: on 401 → one refresh + replay,<br/>else clear tokens → /login
+    User->>Editor: close (X) → pending changes flush
 ```
+
+### Voice → text (AI with graceful fallback)
+
+```mermaid
+flowchart TD
+    Start["User clicks mic"] --> Check{"Whisper enabled?<br/>GET /transcribe"}
+    Check -->|"yes + MediaRecorder"| Rec["Record audio"]
+    Rec --> Up["POST audio → /api/v1/transcribe"]
+    Up --> W["OpenAI Whisper transcribes"]
+    W --> Ins["Insert text into note → autosave"]
+    Check -->|"no key / unsupported / error"| Web["Web Speech API<br/>free in-browser dictation"]
+    Web --> Ins
+```
+
+The AI feature is never a single point of failure or a forced cost: with no key the endpoint reports `enabled: false` and the UI uses the free browser dictation.
+
+### Production deployment (live at notes.cardenas.pe)
+
+The app runs as a self-contained Docker Compose stack on a server that already hosts other apps, so it is fully isolated — its own project, network and volume, exposed only on a loopback port. A server-wide Caddy fronts every domain and issues TLS automatically.
+
+```mermaid
+flowchart LR
+    Net(("Internet")) -->|"443 · HTTPS"| MC["Caddy on the host<br/>auto Let's Encrypt"]
+    MC -->|notes.cardenas.pe| TNP
+    MC -->|other domains| OTHER["other apps"]
+    subgraph TNP["turbo-notes · isolated compose project · 127.0.0.1:3300"]
+        direction TB
+        IP["internal proxy :3300"] --> NX["Next.js :3000"]
+        IP --> DJ["Django :8000"]
+        DJ --> PG[("Postgres<br/>private volume")]
+    end
+```
+
+`docker compose up --build` runs the same stack locally. Kubernetes manifests (`k8s/`) document the horizontal scale-out path but are intentionally not used at this size — see [Scalability](#scalability-considerations).
 
 **Request flow (e.g. autosave):** the user types in the editor → the first change creates the note (`POST /notes/`, category defaulting to Random Thoughts), subsequent changes are debounced 800 ms and PATCHed → the axios request interceptor attaches the access token → DRF authenticates the JWT and the ViewSet's `get_queryset()` scopes everything to `request.user` → on success TanStack Query updates the board cache (and invalidates category counts). If an access token expires mid-session, the response interceptor performs exactly one refresh with the refresh token and replays the original request; if that fails, tokens are cleared and the user lands on `/login`.
 
