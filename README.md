@@ -330,9 +330,9 @@ The challenge encourages AI tooling, so here is exactly what I used and how — 
 
 | Tool | What I used it for |
 |---|---|
-| **Claude (Anthropic)**, via an agentic coding workflow | Primary pair-programmer: scaffolding, feature implementation, test generation, and documentation drafts — run as focused agent sessions, including **parallel backend and frontend agents** against a shared written contract. |
-| **yt-dlp + ffmpeg** (driven by AI) | Downloaded the prototype walkthrough video and extracted it frame-by-frame, then turned those frames into a written design spec — the source of truth for behavior (auth, autosave, categories) before the Figma existed. |
-| **OpenAI Whisper** | Shipped as a *product* feature, not a dev tool: the editor's AI voice-to-text, behind a graceful fallback to free in-browser dictation. |
+| **An agentic LLM coding assistant** (my AI pair-programmer) | The main coworker on this build: scaffolding, feature implementation, test generation, and documentation drafts — run as focused agent sessions, including **parallel backend and frontend agents** working against a shared written contract while I reviewed and integrated. |
+| **yt-dlp + ffmpeg** (driven by the assistant) | Downloaded the prototype walkthrough video and extracted it frame-by-frame, then turned those frames into a written design spec — the source of truth for behavior (auth, autosave, categories) before the Figma existed. |
+| **OpenAI** (Whisper + TTS) | Shipped as *product* features, not dev tools: AI voice-to-text (Whisper) and read-aloud (TTS) in the editor, each behind a graceful fallback to free in-browser speech. |
 | Standard model tooling | OpenAPI/Swagger generation (drf-spectacular), linters and formatters (flake8/black/isort, ESLint/Prettier) as automated quality gates. |
 
 The rest of this section is the honest division of labor.

@@ -150,3 +150,17 @@ TRANSCRIPTION_ENABLED = bool(OPENAI_API_KEY)
 
 # Reject uploads larger than this (matches OpenAI's 25MB Whisper limit).
 TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024
+
+# --- AI text-to-speech ("read note aloud") ----------------------------------
+# Reuses OPENAI_API_KEY / OPENAI_BASE_URL above. When no key is configured the
+# /speak/ endpoint is disabled and the frontend falls back to the browser's
+# free Web Speech synthesis (with a better-chosen voice).
+OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "tts-1").strip()
+# Warm/natural female voice. Valid: alloy, echo, fable, onyx, nova, shimmer.
+OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "nova").strip()
+
+# True only when an API key is configured; gates the /speak/ endpoint.
+TTS_ENABLED = bool(OPENAI_API_KEY)
+
+# Reject TTS requests longer than this (keeps responses fast/cheap).
+TTS_MAX_CHARS = 4000

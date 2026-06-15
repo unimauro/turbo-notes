@@ -14,9 +14,11 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useCreateNote, useUpdateNote } from "@/hooks/useNotes";
 import { useWhisperRecorder } from "@/hooks/useWhisperRecorder";
 import { categoryPalette } from "@/lib/colors";
+import { loadVoices, pickVoice, speakWithBrowser } from "@/lib/speech";
 import { formatEditorTimestamp } from "@/lib/time";
 import type { ListNotesParams } from "@/services/notes";
 import { getTranscriptionEnabled } from "@/services/transcription";
+import { getTtsEnabled, speak } from "@/services/tts";
 import type { Category, CategoryRef, Note, NoteInput } from "@/types/note";
 
 export const AUTOSAVE_DELAY_MS = 800;
@@ -149,39 +151,148 @@ export default function NoteEditor({
 
   function handleClose() {
     dictationStopRef.current?.(); // end any in-flight recognition first
+    stopPlaybackRef.current?.(); // and any in-flight read-aloud playback
     void flush(); // mutations outlive the unmount via the query client
     onClose();
   }
 
+  // Lets handleClose() (declared before the speak logic) stop read-aloud audio.
+  const stopPlaybackRef = useRef<(() => void) | null>(null);
+
   // Lets handleClose() (declared before useDictation) reach the latest stop fn.
   const dictationStopRef = useRef<(() => void) | null>(null);
 
-  // ---- "Listen" (read note aloud via Web Speech API) -----------------------
+  // ---- "Listen" (read note aloud) -----------------------------------------
+  // Preferred path: server-side OpenAI TTS (soft, natural voice) — fetch an mp3
+  // blob and play it. Fallback: the browser's Web Speech synthesis, but with a
+  // GOOD English voice (see lib/speech) instead of the default robotic one. We
+  // decide ONCE on open whether TTS is available (GET /speak/).
   const speechSupported =
     typeof window !== "undefined" && "speechSynthesis" in window;
 
-  // Stop any in-flight speech when the editor unmounts.
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsVoice, setTtsVoice] = useState("");
+  const [speakLoading, setSpeakLoading] = useState(false);
+
+  // Holds the currently-playing <audio> element + its object URL so a second
+  // click (or close/unmount) can stop playback and free the blob URL.
+  const audioRef = useRef<{ el: HTMLAudioElement; url: string } | null>(null);
+
+  // The headphones button shows when EITHER path is available.
+  const listenAvailable = ttsEnabled || speechSupported;
+
+  // Resolve TTS availability once on open.
   useEffect(() => {
-    if (!speechSupported) return;
-    return () => window.speechSynthesis.cancel();
-  }, [speechSupported]);
+    let cancelled = false;
+    getTtsEnabled()
+      .then(({ enabled, voice }) => {
+        if (cancelled) return;
+        setTtsEnabled(enabled);
+        setTtsVoice(voice);
+      })
+      .catch(() => {
+        if (!cancelled) setTtsEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.el.pause();
+      URL.revokeObjectURL(audioRef.current.url);
+      audioRef.current = null;
+    }
+  }, []);
+
+  // Stop any in-flight speech/audio when the editor unmounts.
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      if (speechSupported) window.speechSynthesis?.cancel();
+    };
+  }, [speechSupported, stopAudio]);
+
+  // Expose a stop fn to handleClose (declared earlier). Written in an effect
+  // only (never during render) per this file's ref-write rule.
+  useEffect(() => {
+    stopPlaybackRef.current = () => {
+      stopAudio();
+      if (speechSupported) window.speechSynthesis?.cancel();
+    };
+  }, [speechSupported, stopAudio]);
+
+  const noteText = useCallback(
+    () => [title, content].filter(Boolean).join("\n").trim(),
+    [title, content],
+  );
+
+  // Fallback: read aloud with a hand-picked natural browser voice.
+  const speakWithBrowserVoice = useCallback(
+    async (text: string) => {
+      if (!speechSupported) {
+        setSpeaking(false);
+        return;
+      }
+      const synth = window.speechSynthesis;
+      synth.cancel(); // clear any queued utterance from a prior note
+      const voices = await loadVoices(synth);
+      const utterance = speakWithBrowser(synth, text, pickVoice(voices));
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+    },
+    [speechSupported],
+  );
 
   function toggleSpeak() {
-    if (!speechSupported) return;
-    const synth = window.speechSynthesis;
-    if (speaking) {
-      synth.cancel();
+    // A second click (while speaking/loading) always stops everything.
+    if (speaking || speakLoading) {
+      stopAudio();
+      if (speechSupported) window.speechSynthesis?.cancel();
       setSpeaking(false);
+      setSpeakLoading(false);
       return;
     }
-    const text = [title, content].filter(Boolean).join(". ").trim();
+
+    const text = noteText();
     if (!text) return;
-    synth.cancel(); // clear any queued utterance from a prior note
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
+
+    // Prefer server-side OpenAI TTS; fall back to the browser on any failure.
+    if (ttsEnabled) {
+      setSpeakLoading(true);
+      speak(text, ttsVoice || undefined)
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const el = new Audio(url);
+          audioRef.current = { el, url };
+          el.onended = () => {
+            stopAudio();
+            setSpeaking(false);
+          };
+          el.onerror = () => {
+            stopAudio();
+            setSpeaking(false);
+          };
+          setSpeakLoading(false);
+          setSpeaking(true);
+          // play() may reject (e.g. autoplay policy); fall back if it does.
+          void el.play().catch(() => {
+            stopAudio();
+            void speakWithBrowserVoice(text);
+          });
+        })
+        .catch(() => {
+          // TTS request failed — fall back to the browser voice.
+          setSpeakLoading(false);
+          setSpeaking(true);
+          void speakWithBrowserVoice(text);
+        });
+      return;
+    }
+
     setSpeaking(true);
-    synth.speak(utterance);
+    void speakWithBrowserVoice(text);
   }
 
   // ---- Voice dictation (Web Speech API — free, no keys/backend) -----------
@@ -477,13 +588,22 @@ export default function NoteEditor({
               >
                 <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
               </button>
-              {speechSupported && (
+              {listenAvailable && (
                 <button
                   type="button"
                   onClick={toggleSpeak}
-                  aria-label="Read note aloud"
-                  aria-pressed={speaking}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-linen transition-colors hover:bg-linen/15 focus:outline-none focus:ring-2 focus:ring-linen/40"
+                  aria-label={
+                    speakLoading
+                      ? "Loading audio"
+                      : speaking
+                        ? "Stop reading"
+                        : "Read note aloud"
+                  }
+                  aria-busy={speakLoading}
+                  aria-pressed={speaking || speakLoading}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-linen transition-colors hover:bg-linen/15 focus:outline-none focus:ring-2 focus:ring-linen/40 ${
+                    speaking || speakLoading ? "bg-linen/20" : ""
+                  } ${speakLoading ? "animate-pulse" : ""}`}
                 >
                   <Headphones className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -501,13 +621,22 @@ export default function NoteEditor({
                   <Mic className="h-5 w-5" aria-hidden="true" />
                 </button>
               )}
-              {speechSupported && (
+              {listenAvailable && (
                 <button
                   type="button"
                   onClick={toggleSpeak}
-                  aria-label="Read note aloud"
-                  aria-pressed={speaking}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-cream shadow-md transition-colors hover:bg-ink-soft focus:outline-none focus:ring-2 focus:ring-ink/40"
+                  aria-label={
+                    speakLoading
+                      ? "Loading audio"
+                      : speaking
+                        ? "Stop reading"
+                        : "Read note aloud"
+                  }
+                  aria-busy={speakLoading}
+                  aria-pressed={speaking || speakLoading}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full bg-ink text-cream shadow-md transition-colors hover:bg-ink-soft focus:outline-none focus:ring-2 focus:ring-ink/40 ${
+                    speakLoading ? "animate-pulse" : ""
+                  }`}
                 >
                   <Headphones className="h-5 w-5" aria-hidden="true" />
                 </button>

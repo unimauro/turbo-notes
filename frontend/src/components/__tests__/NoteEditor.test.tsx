@@ -19,6 +19,14 @@ jest.mock("@/services/transcription", () => ({
   transcribeAudio: jest.fn(),
 }));
 
+// AI text-to-speech is disabled by default in these tests; the editor falls
+// back to the browser's Web Speech synthesis (or hides the button in jsdom,
+// which exposes no speechSynthesis).
+jest.mock("@/services/tts", () => ({
+  getTtsEnabled: jest.fn().mockResolvedValue({ enabled: false, voice: "" }),
+  speak: jest.fn(),
+}));
+
 import NoteEditor, { AUTOSAVE_DELAY_MS } from "@/components/NoteEditor";
 import { createNote, updateNote } from "@/services/notes";
 import type { Category, Note } from "@/types/note";
@@ -231,6 +239,27 @@ describe("NoteEditor autosave", () => {
     });
     // No "transcribing" indicator should ever appear in this mode.
     expect(screen.queryByText(/transcribing/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the read-aloud (headphones) button via the browser fallback when TTS is disabled", () => {
+    // jsdom has no speechSynthesis, so stub a minimal one to exercise the
+    // browser fallback path. We never actually play audio here.
+    const synth = {
+      cancel: jest.fn(),
+      speak: jest.fn(),
+      getVoices: jest.fn().mockReturnValue([]),
+      addEventListener: jest.fn(),
+    };
+    (window as unknown as { speechSynthesis: unknown }).speechSynthesis = synth;
+    try {
+      renderEditor(savedNote);
+      expect(
+        screen.getByRole("button", { name: /read note aloud/i }),
+      ).toBeInTheDocument();
+    } finally {
+      delete (window as unknown as { speechSynthesis?: unknown })
+        .speechSynthesis;
+    }
   });
 
   it("changing the category schedules a save too", async () => {
