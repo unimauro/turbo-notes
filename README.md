@@ -351,6 +351,10 @@ The theme: each step is taken when measurement demands it, and none of them requ
 
 ## Future improvements
 
+See **[ROADMAP.md](ROADMAP.md)** for the product vision — the AI-first "wow" features
+(realtime voice agent, ask-your-notes RAG, semantic search) prioritized by impact vs effort.
+The near-term engineering items:
+
 - **httpOnly-cookie token storage** — the hardened alternative to `localStorage`; contained in `lib/tokens.ts` + `services/api.ts` plus backend cookie issuance and CSRF.
 - **User-defined categories** — owner FK on `Category`, CRUD endpoints, color picker constrained to the palette slugs.
 - **Search UI** — the API already supports `?search=`; surfacing it is a design decision deferred to match the prototype.
