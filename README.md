@@ -324,7 +324,18 @@ Validation errors return DRF's structured 400 shape, e.g. `{"email": ["A user wi
 
 ## AI usage
 
-I built this project with agentic LLM coding tools as a force multiplier, and I want to be precise about the division of labor, because I think that's what responsible AI-assisted engineering looks like. Every claim below is checkable in this repo.
+The challenge encourages AI tooling, so here is exactly what I used and how — with a precise division of labor, because that's what responsible AI-assisted engineering looks like. Every claim below is checkable in this repo.
+
+**Tools I used**
+
+| Tool | What I used it for |
+|---|---|
+| **Claude (Anthropic)**, via an agentic coding workflow | Primary pair-programmer: scaffolding, feature implementation, test generation, and documentation drafts — run as focused agent sessions, including **parallel backend and frontend agents** against a shared written contract. |
+| **yt-dlp + ffmpeg** (driven by AI) | Downloaded the prototype walkthrough video and extracted it frame-by-frame, then turned those frames into a written design spec — the source of truth for behavior (auth, autosave, categories) before the Figma existed. |
+| **OpenAI Whisper** | Shipped as a *product* feature, not a dev tool: the editor's AI voice-to-text, behind a graceful fallback to free in-browser dictation. |
+| Standard model tooling | OpenAPI/Swagger generation (drf-spectacular), linters and formatters (flake8/black/isort, ESLint/Prettier) as automated quality gates. |
+
+The rest of this section is the honest division of labor.
 
 **What I owned:** the architecture and every consequential decision — service-less DRF ViewSets over a ceremonial service layer; keeping Django's default `User` with the email invariant enforced in `RegisterSerializer` rather than swapping `AUTH_USER_MODEL` mid-project; 404-not-403 for cross-user access; category color as an API slug with the palette on the frontend; the default category resolved at serializer time; `localStorage` tokens with the httpOnly-cookie tradeoff written down rather than glossed over. I also owned code review: I read the generated code the way I'd review a teammate's PR, and rejected or reworked anything that didn't meet the bar.
 
