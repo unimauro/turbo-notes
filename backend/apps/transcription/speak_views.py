@@ -19,6 +19,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.audit.models import AiUsageEvent
+from apps.audit.services import log_ai_usage
+
 from .tts import ALLOWED_VOICES, SpeechError, synthesize
 
 
@@ -113,9 +116,25 @@ class SpeakView(APIView):
         try:
             audio = synthesize(text, voice)
         except SpeechError as exc:
+            # Cost visibility: record the (failed) OpenAI call. Best-effort.
+            log_ai_usage(
+                user=request.user,
+                endpoint=AiUsageEvent.Endpoint.SPEAK,
+                model=settings.OPENAI_TTS_MODEL,
+                input_size=len(text),
+                success=False,
+            )
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        # Cost visibility: record the successful OpenAI call. Best-effort.
+        log_ai_usage(
+            user=request.user,
+            endpoint=AiUsageEvent.Endpoint.SPEAK,
+            model=settings.OPENAI_TTS_MODEL,
+            input_size=len(text),
+            success=True,
+        )
         return HttpResponse(audio, content_type="audio/mpeg")

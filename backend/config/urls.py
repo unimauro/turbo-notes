@@ -1,5 +1,6 @@
 """Root URL configuration: versioned API, schema/docs, and health check."""
 
+from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -11,6 +12,7 @@ def health(_request):
 
 
 urlpatterns = [
+    path("admin/", admin.site.urls),
     path("api/v1/", include("apps.users.urls")),
     path("api/v1/", include("apps.notes.urls")),
     path("api/v1/", include("apps.transcription.urls")),

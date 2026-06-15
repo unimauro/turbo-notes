@@ -20,6 +20,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.audit.models import AiUsageEvent
+from apps.audit.services import log_ai_usage
+
 from .services import TranscriptionError, transcribe
 
 # Accepted audio extensions (mirrors what Whisper supports).
@@ -111,9 +114,25 @@ class TranscribeView(APIView):
         try:
             text = transcribe(audio, audio.name or "audio.webm")
         except TranscriptionError as exc:
+            # Cost visibility: record the (failed) OpenAI call. Best-effort.
+            log_ai_usage(
+                user=request.user,
+                endpoint=AiUsageEvent.Endpoint.TRANSCRIBE,
+                model=settings.WHISPER_MODEL,
+                input_size=audio.size,
+                success=False,
+            )
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        # Cost visibility: record the successful OpenAI call. Best-effort.
+        log_ai_usage(
+            user=request.user,
+            endpoint=AiUsageEvent.Endpoint.TRANSCRIBE,
+            model=settings.WHISPER_MODEL,
+            input_size=audio.size,
+            success=True,
+        )
         return Response({"text": text})

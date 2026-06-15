@@ -40,8 +40,12 @@ DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "*")
 
 INSTALLED_APPS = [
-    "django.contrib.contenttypes",
+    # Django admin (back-office) + its dependencies.
+    "django.contrib.admin",
     "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
     "django.contrib.staticfiles",
     # Third-party
     "rest_framework",
@@ -52,12 +56,19 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.notes",
     "apps.transcription",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise serves the admin's static assets at DEBUG=False (immediately
+    # after SecurityMiddleware, per its docs). The API itself serves no assets.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -67,7 +78,14 @@ TEMPLATES = [
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],
         "APP_DIRS": True,
-        "OPTIONS": {"context_processors": []},
+        "OPTIONS": {
+            # Context processors required by the Django admin.
+            "context_processors": [
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.request",
+            ],
+        },
     },
 ]
 
@@ -93,6 +111,15 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# WhiteNoise serves the admin's static files in production (DEBUG=False) with
+# hashed, compressed (gzip/brotli) filenames. collectstatic builds the manifest.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # --- DRF / API --------------------------------------------------------------
 
