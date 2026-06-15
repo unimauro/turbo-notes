@@ -36,6 +36,10 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: ${DOMAIN},localhost,127.0.0.1
       CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      # AI transcription (Whisper) — optional; empty means disabled (free browser dictation).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
     depends_on:
       db:
         condition: service_healthy

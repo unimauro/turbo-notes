@@ -36,6 +36,9 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: ${DOMAIN}
       CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
     depends_on:
       db:
         condition: service_healthy
