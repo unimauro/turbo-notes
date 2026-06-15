@@ -34,8 +34,16 @@ class NoteViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Note.objects.filter(owner=self.request.user).select_related("category")
         category = self.request.query_params.get("category")
-        if category and category.isdigit():
-            queryset = queryset.filter(category_id=category)
+        # Safe parse: ``str.isdigit()`` is True for unicode digits like "²"/"½",
+        # which then blow up int() / the DB cast; and a 10**40 value overflows
+        # Postgres' bigint. Parse defensively and ignore anything invalid or
+        # out of range instead of 500-ing.
+        try:
+            cid = int(category)
+        except (TypeError, ValueError):
+            cid = None
+        if cid is not None and 0 < cid < 9223372036854775807:
+            queryset = queryset.filter(category_id=cid)
         return queryset
 
     def perform_create(self, serializer: NoteSerializer) -> None:

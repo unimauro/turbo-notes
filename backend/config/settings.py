@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -25,17 +26,27 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 def env_list(name: str, default: str) -> list[str]:
-    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+    # When the var is set but empty/whitespace, fall back to the default so an
+    # accidentally-blank DJANGO_ALLOWED_HOSTS does not collapse to [].
+    raw = os.environ.get(name)
+    raw = raw if (raw and raw.strip()) else default
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 # --- Core -------------------------------------------------------------------
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "dev-only-insecure-secret-key-change-me",  # noqa: S105 - dev fallback only
-)
+_DEV_SECRET_KEY = "dev-only-insecure-secret-key-change-me"  # noqa: S105 - dev fallback only
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEV_SECRET_KEY)
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
+
+# Fail closed in production: refuse to boot with an empty, dev, or placeholder
+# secret key. Local dev / tests run with DEBUG=True and are untouched.
+if not DEBUG and SECRET_KEY in {"", _DEV_SECRET_KEY, "change-me-to-a-long-random-secret"}:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be set to a strong unique value in production."
+    )
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "*")
 
@@ -101,6 +112,30 @@ DATABASES = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Cache ------------------------------------------------------------------
+# DRF scoped throttle counters ("auth"/"ai") live in the cache. With the old
+# per-process LocMemCache each gunicorn worker kept its own counters, so the
+# effective rate limit multiplied by the worker count. A database-backed cache
+# shares the counters across all workers via Postgres without adding a new
+# service (e.g. Redis). entrypoint.sh runs `createcachetable` so the backing
+# table exists in production.
+#
+# Under the test suite we use an in-process LocMemCache instead: it needs no
+# DB table (the pytest-django test DB never runs createcachetable) and the
+# conftest cache.clear() keeps throttle state isolated per test. PYTEST_VERSION
+# is exported by pytest >= 7 for exactly this kind of "am I under test?" check.
+if os.environ.get("PYTEST_VERSION") is not None:
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache_table",
+        },
+    }
 
 # --- I18N / static ----------------------------------------------------------
 

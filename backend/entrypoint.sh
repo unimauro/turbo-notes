@@ -4,6 +4,10 @@ set -e
 
 python manage.py migrate --noinput
 
+# Create the database-backed cache table used for shared DRF throttle counters
+# across gunicorn workers. Idempotent: a no-op when the table already exists.
+python manage.py createcachetable
+
 # Build the admin's hashed/compressed static assets (served by WhiteNoise).
 python manage.py collectstatic --noinput
 

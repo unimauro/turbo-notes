@@ -104,6 +104,13 @@ class TranscribeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if audio.size == 0:
+            # Reject before spending a billable OpenAI call on empty input.
+            return Response(
+                {"detail": "Audio file is empty"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         _, ext = os.path.splitext(audio.name or "")
         if ext.lower() not in ALLOWED_EXTENSIONS:
             return Response(

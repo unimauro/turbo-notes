@@ -9,7 +9,7 @@ unless --force is passed).
 """
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.notes.models import Category, Note
@@ -84,6 +84,11 @@ class Command(BaseCommand):
             default=DEMO_PASSWORD,
             help="Password for the seeded user (default: demo12345).",
         )
+        parser.add_argument(
+            "--overwrite",
+            action="store_true",
+            help="Reset the password and replace notes of an existing (non-privileged) user.",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -98,6 +103,22 @@ class Command(BaseCommand):
         email = options["email"].strip().lower()
         password = options["password"]
         user, created = User.objects.get_or_create(username=email, defaults={"email": email})
+
+        if not created:
+            # Never touch a real privileged account, even with --overwrite.
+            if user.is_staff or user.is_superuser:
+                raise CommandError(
+                    f"Refusing to seed over privileged account {email!r} "
+                    "(is_staff/is_superuser)."
+                )
+            # An existing ordinary account is only refreshed when explicitly
+            # asked, so we never silently clobber someone's password/notes.
+            if not options["overwrite"]:
+                raise CommandError(
+                    f"User {email!r} already exists. Pass --overwrite to reset "
+                    "its password and replace its notes."
+                )
+
         user.set_password(password)
         user.save()
 
