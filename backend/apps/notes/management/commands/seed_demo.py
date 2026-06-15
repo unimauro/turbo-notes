@@ -74,6 +74,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Run even if DEBUG is False.",
         )
+        parser.add_argument(
+            "--email",
+            default=DEMO_EMAIL,
+            help=f"Email for the seeded user (default: {DEMO_EMAIL}).",
+        )
+        parser.add_argument(
+            "--password",
+            default=DEMO_PASSWORD,
+            help="Password for the seeded user (default: demo12345).",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -85,10 +95,10 @@ class Command(BaseCommand):
             )
             return
 
-        user, created = User.objects.get_or_create(
-            username=DEMO_EMAIL, defaults={"email": DEMO_EMAIL}
-        )
-        user.set_password(DEMO_PASSWORD)
+        email = options["email"].strip().lower()
+        password = options["password"]
+        user, created = User.objects.get_or_create(username=email, defaults={"email": email})
+        user.set_password(password)
         user.save()
 
         # Refresh demo notes so reruns stay clean.
@@ -105,7 +115,6 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seeded {len(SAMPLE_NOTES)} notes for {DEMO_EMAIL} "
-                f"(password: {DEMO_PASSWORD})."
+                f"Seeded {len(SAMPLE_NOTES)} notes for {email} " f"(password: {password})."
             )
         )
