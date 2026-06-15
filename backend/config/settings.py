@@ -108,6 +108,14 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 12,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    # Scoped throttling only: applied per-view via throttle_scope so unrelated
+    # endpoints (and tests) are unaffected. "auth" slows login/register
+    # brute-force (keyed by IP for anonymous); "ai" caps the cost-incurring
+    # OpenAI transcribe/speak endpoints (keyed by user once authenticated).
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": "10/min",
+        "ai": "20/min",
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -164,3 +172,24 @@ TTS_ENABLED = bool(OPENAI_API_KEY)
 
 # Reject TTS requests longer than this (keeps responses fast/cheap).
 TTS_MAX_CHARS = 4000
+
+# --- Production security hardening -------------------------------------------
+# Only applied when DEBUG is False so local development and the test suite
+# (which run with DEBUG=True) are untouched. The app runs behind Caddy, which
+# terminates TLS and already redirects http->https, so SECURE_SSL_REDIRECT is
+# intentionally left off (Caddy handles it; enabling here risks double-redirect).
+if not DEBUG:
+    # Trust the X-Forwarded-Proto header set by the Caddy TLS terminator.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # HSTS: force HTTPS for a year, including subdomains, and allow preload.
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Only send cookies over HTTPS.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # Defense-in-depth header (default True, set explicitly for clarity).
+    SECURE_CONTENT_TYPE_NOSNIFF = True

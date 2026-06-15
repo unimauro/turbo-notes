@@ -117,3 +117,16 @@ class TestJwtEndToEnd:
         response = client.get(reverse("note-list"))
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["count"] == 0
+
+
+class TestAuthThrottle:
+    def test_login_brute_force_is_throttled_after_10_requests(self, client):
+        # Unknown account -> 401 each time, isolating the "auth" scope to the
+        # login endpoint (no register call, which shares the same IP counter).
+        creds = {"email": "ghost@example.com", "password": "wrong-pass-1"}
+        # The "auth" scope allows 10/min; the 11th attempt must be blocked.
+        for _ in range(10):
+            response = client.post(TOKEN_URL, creds, format="json")
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        blocked = client.post(TOKEN_URL, creds, format="json")
+        assert blocked.status_code == status.HTTP_429_TOO_MANY_REQUESTS

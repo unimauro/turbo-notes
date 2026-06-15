@@ -16,6 +16,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .tts import ALLOWED_VOICES, SpeechError, synthesize
@@ -28,10 +29,20 @@ class SpeakView(APIView):
     before login flows complete; POST requires authentication.
     """
 
+    # Caps OpenAI (TTS) cost abuse; keyed by authenticated user.
+    throttle_scope = "ai"
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
+
+    def get_throttles(self):
+        # Only throttle the cost-incurring POST; the public GET availability
+        # probe stays unthrottled so the frontend can poll it freely.
+        if self.request.method == "POST":
+            return [ScopedRateThrottle()]
+        return []
 
     @extend_schema(
         summary="Is AI text-to-speech configured?",

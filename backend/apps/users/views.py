@@ -1,5 +1,6 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .serializers import EmailTokenObtainPairSerializer, RegisterSerializer
@@ -12,6 +13,9 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []  # credentials-in, no token required
+    # Brute-force/abuse protection: anonymous, so keyed by client IP.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
 
 
 @extend_schema(tags=["auth"])
@@ -19,3 +23,6 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     """POST {email, password} -> 200 {access, refresh}."""
 
     serializer_class = EmailTokenObtainPairSerializer
+    # Brute-force protection on login: anonymous, so keyed by client IP.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"

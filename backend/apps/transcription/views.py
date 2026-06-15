@@ -17,6 +17,7 @@ from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .services import TranscriptionError, transcribe
@@ -33,11 +34,20 @@ class TranscribeView(APIView):
     """
 
     parser_classes = [MultiPartParser, FormParser]
+    # Caps OpenAI (Whisper) cost abuse; keyed by authenticated user.
+    throttle_scope = "ai"
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
+
+    def get_throttles(self):
+        # Only throttle the cost-incurring POST; the public GET availability
+        # probe stays unthrottled so the frontend can poll it freely.
+        if self.request.method == "POST":
+            return [ScopedRateThrottle()]
+        return []
 
     @extend_schema(
         summary="Is AI transcription configured?",
