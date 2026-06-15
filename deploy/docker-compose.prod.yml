@@ -49,6 +49,7 @@ services:
       args:
         # Same-origin: the browser calls https://<domain>/api/v1, Caddy routes it.
         NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
+        NEXT_PUBLIC_GA_ID: ${NEXT_PUBLIC_GA_ID:-}
     restart: unless-stopped
     depends_on:
       - backend

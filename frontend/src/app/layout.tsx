@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import Providers from "@/lib/providers";
 
 import "./globals.css";
@@ -36,6 +37,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <GoogleAnalytics />
       </head>
       <body className="flex min-h-full flex-col bg-cream font-sans text-ink-soft dark:bg-bark dark:text-linen">
         <Providers>{children}</Providers>
