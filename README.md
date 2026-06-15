@@ -347,6 +347,14 @@ The rest of this section is the honest division of labor.
 
 **Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 94 + 58 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
 
+## Security
+
+See **[SECURITY.md](SECURITY.md)** for the full **OWASP Top 10 (2021)** posture. Highlights:
+owner-scoped access control (404 over 403), HTTPS + HSTS + secure cookies in prod, ORM-only
+queries with allow-listed filters, **rate limiting** on auth (10/min) and the paid AI
+endpoints (20/min), validated upload/text limits, and no committed secrets. Known gaps are
+named honestly (structured security logging; a transitive build-time `npm audit` advisory).
+
 ## Scalability considerations
 
 The current design is honest about its scale (a challenge app) but the upgrade path is deliberate:
