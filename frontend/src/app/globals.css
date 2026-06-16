@@ -73,11 +73,37 @@ html.dark {
   animation: live-pulse 1.2s ease-in-out infinite;
 }
 
-/* "Turbo close" hands-free command animations.
+/* Editor overlay open/close + hands-free command animations.
+   - editor-enter: every time the overlay mounts it fades in and scales up
+     slightly from ~0.98 for a subtle entrance.
+   - editor-exit: every close (X / Escape) plays a gentle fade-out + slight
+     scale-up before the overlay unmounts.
    - title-materialize: when an AI-generated title is applied, the heading fades
      and scales/blurs in for a one-shot "materializing" beat.
-   - editor-evaporate: the whole overlay fades out, scales up slightly and blurs
-     as it gracefully dissolves before unmounting. */
+   - editor-evaporate: the hands-free "close my note" flow fades the whole
+     overlay out, scales up slightly and blurs as it dissolves before unmount. */
+@keyframes editor-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes editor-exit {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
 @keyframes title-materialize {
   0% {
     opacity: 0;
@@ -104,6 +130,14 @@ html.dark {
   }
 }
 
+.editor-enter {
+  animation: editor-enter 0.24s ease-out both;
+}
+
+.editor-exit {
+  animation: editor-exit 0.28s ease-in forwards;
+}
+
 .turbo-materialize {
   animation: title-materialize 0.6s ease-out both;
 }
@@ -115,11 +149,13 @@ html.dark {
 @media (prefers-reduced-motion: reduce) {
   .dictation-bar,
   .dictation-dot,
+  .editor-enter,
   .turbo-materialize {
     animation: none;
   }
 
-  /* Still hide the overlay on evaporate, but without the motion. */
+  /* Still hide the overlay on exit/evaporate, but without transform/blur. */
+  .editor-exit,
   .turbo-evaporate {
     animation: none;
     opacity: 0;

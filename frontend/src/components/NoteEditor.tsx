@@ -35,6 +35,10 @@ import type { Category, CategoryRef, Note, NoteInput } from "@/types/note";
 
 export const AUTOSAVE_DELAY_MS = 800;
 
+// How long the gentle close (X / Escape) exit animation runs before the overlay
+// unmounts. Mirrors the `.editor-exit` keyframe duration in globals.css.
+export const EDITOR_EXIT_MS = 280;
+
 const FALLBACK_CATEGORY: CategoryRef = {
   id: -1,
   name: "Random Thoughts",
@@ -81,6 +85,9 @@ export default function NoteEditor({
   // "materialize" animation, and when the whole overlay is "evaporating" out.
   const [titleMaterializing, setTitleMaterializing] = useState(false);
   const [evaporating, setEvaporating] = useState(false);
+  // Set while the gentle exit animation plays for a normal close (X / Escape),
+  // just before we call onClose() and the parent unmounts the overlay.
+  const [exiting, setExiting] = useState(false);
 
   // Derived (no effect needed): user pick > note's category > seeded default.
   const category =
@@ -195,12 +202,18 @@ export default function NoteEditor({
     } catch {
       ok = false;
     }
-    closingRef.current = false;
     if (ok) {
       setSaveError(null);
+      // Play the gentle exit animation, THEN unmount. We keep closingRef held
+      // through the animation so a second X/Escape can't double-trigger.
+      setExiting(true);
+      await new Promise((resolve) => setTimeout(resolve, EDITOR_EXIT_MS));
+      closingRef.current = false;
       onClose();
     } else {
+      closingRef.current = false;
       // Keep the editor open so the user can retry; their text is still here.
+      // (Flush failed — do NOT animate or close: no data loss.)
       setSaveError("Couldn't save your changes. Please try again.");
     }
   }
@@ -229,6 +242,11 @@ export default function NoteEditor({
 
   // The headphones button shows when EITHER path is available.
   const listenAvailable = ttsEnabled || speechSupported;
+
+  // There's nothing to read aloud when both title and content are blank/
+  // whitespace — disable the listen button in that case.
+  const hasReadableContent =
+    title.trim().length > 0 || content.trim().length > 0;
 
   // Resolve TTS availability once on open.
   useEffect(() => {
@@ -496,8 +514,10 @@ export default function NoteEditor({
     };
   }, []);
 
-  // There's only something worth assisting once there is some text.
-  const assistHasText = Boolean(noteText());
+  // There's only something worth assisting once the note body has real text:
+  // both "suggest title" and "summarize" act on the content, so an empty/
+  // whitespace-only body disables them.
+  const assistHasText = content.trim().length > 0;
 
   // "Suggest title": send title+content (or just content), set the title field
   // through the same latestRef + scheduleSave path the other handlers use so it
@@ -650,7 +670,11 @@ export default function NoteEditor({
       aria-label={note ? "Edit note" : "New note"}
       onKeyDown={handleKeyDown}
       className={`fixed inset-0 z-40 flex flex-col bg-cream px-4 py-4 sm:px-8 sm:py-6 dark:bg-bark ${
-        evaporating ? "turbo-evaporate" : ""
+        evaporating
+          ? "turbo-evaporate"
+          : exiting
+            ? "editor-exit"
+            : "editor-enter"
       }`}
     >
       <header className="flex items-center justify-between">
@@ -902,7 +926,7 @@ export default function NoteEditor({
             aria-hidden="true"
             className="pointer-events-none absolute bottom-[4.25rem] right-5 select-none text-right text-xs italic text-ink/45 sm:bottom-[5.25rem] sm:right-7"
           >
-            Say &ldquo;Turbo close&rdquo; to finish
+            Say &ldquo;close my note&rdquo; to finish
           </p>
         )}
 
@@ -940,6 +964,8 @@ export default function NoteEditor({
                 <button
                   type="button"
                   onClick={toggleSpeak}
+                  disabled={!hasReadableContent}
+                  aria-disabled={!hasReadableContent}
                   aria-label={
                     speakLoading
                       ? "Loading audio"
@@ -949,7 +975,7 @@ export default function NoteEditor({
                   }
                   aria-busy={speakLoading}
                   aria-pressed={speaking || speakLoading}
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-linen transition-colors hover:bg-linen/15 focus:outline-none focus:ring-2 focus:ring-linen/40 ${
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-linen transition-colors hover:bg-linen/15 focus:outline-none focus:ring-2 focus:ring-linen/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
                     speaking || speakLoading ? "bg-linen/20" : ""
                   } ${speakLoading ? "animate-pulse" : ""}`}
                 >
@@ -973,6 +999,8 @@ export default function NoteEditor({
                 <button
                   type="button"
                   onClick={toggleSpeak}
+                  disabled={!hasReadableContent}
+                  aria-disabled={!hasReadableContent}
                   aria-label={
                     speakLoading
                       ? "Loading audio"
@@ -982,7 +1010,7 @@ export default function NoteEditor({
                   }
                   aria-busy={speakLoading}
                   aria-pressed={speaking || speakLoading}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full bg-ink text-cream shadow-md transition-colors hover:bg-ink-soft focus:outline-none focus:ring-2 focus:ring-ink/40 ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-full bg-ink text-cream shadow-md transition-colors hover:bg-ink-soft focus:outline-none focus:ring-2 focus:ring-ink/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-ink ${
                     speakLoading ? "animate-pulse" : ""
                   }`}
                 >

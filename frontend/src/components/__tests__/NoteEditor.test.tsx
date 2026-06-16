@@ -149,8 +149,14 @@ describe("NoteEditor autosave", () => {
     });
 
     // Close before the debounce elapses — the change must not be lost.
-    fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
     await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
+    });
+    // Let the flush promise chain settle, run all timers (the exit-animation
+    // delay), and settle again so onClose() fires.
+    await act(async () => {
+      await Promise.resolve();
+      jest.runOnlyPendingTimers();
       await Promise.resolve();
     });
 
@@ -166,8 +172,12 @@ describe("NoteEditor autosave", () => {
   it("does nothing on close when nothing changed", async () => {
     const onClose = renderEditor(savedNote);
 
-    fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
     await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+      jest.runOnlyPendingTimers();
       await Promise.resolve();
     });
 
@@ -272,6 +282,33 @@ describe("NoteEditor autosave", () => {
     }
   });
 
+  it("disables the read-aloud button on an empty note and enables it once there's text", () => {
+    const synth = {
+      cancel: jest.fn(),
+      speak: jest.fn(),
+      getVoices: jest.fn().mockReturnValue([]),
+      addEventListener: jest.fn(),
+    };
+    (window as unknown as { speechSynthesis: unknown }).speechSynthesis = synth;
+    try {
+      // Brand-new, empty note: nothing to read aloud.
+      renderEditor(null);
+      const listen = screen.getByRole("button", { name: /read note aloud/i });
+      expect(listen).toBeDisabled();
+
+      // Type some content — the button becomes enabled.
+      fireEvent.change(screen.getByPlaceholderText("Pour your heart out..."), {
+        target: { value: "now there's something to read" },
+      });
+      expect(
+        screen.getByRole("button", { name: /read note aloud/i }),
+      ).toBeEnabled();
+    } finally {
+      delete (window as unknown as { speechSynthesis?: unknown })
+        .speechSynthesis;
+    }
+  });
+
   it("hides the AI assist buttons when assist is disabled", async () => {
     // getAssistEnabled resolves false (mocked above), so neither button renders.
     renderEditor(savedNote);
@@ -291,7 +328,8 @@ describe("NoteEditor autosave", () => {
     getAssistEnabledMock.mockResolvedValueOnce(true);
     assistMock.mockResolvedValueOnce("A Crisp Title");
     updateNoteMock.mockResolvedValue(savedNote);
-    renderEditor(savedNote);
+    // The note needs some body text for the assist buttons to be enabled.
+    renderEditor({ ...savedNote, content: "some body to title" });
 
     // Let the GET /assist/ availability probe resolve so the buttons render.
     await act(async () => {
@@ -314,7 +352,7 @@ describe("NoteEditor autosave", () => {
     });
     expect(updateNoteMock).toHaveBeenCalledWith(42, {
       title: "A Crisp Title",
-      content: "",
+      content: "some body to title",
       category_id: 1,
     });
   });
