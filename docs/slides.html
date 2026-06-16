@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turbo Notes — Technical Exposition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/css/print/pdf.css" media="print">
+<style>
+  :root{
+    --cream:#fbf7ee; --paper:#f4ecd8; --ink:#34301f; --soft:#6b6450;
+    --olive:#5f6b34; --terra:#b06a33; --line:#e3dac4;
+    --coral:#e8a06d; --yellow:#ead98c; --teal:#9bc1b0; --lav:#b9a8d0;
+  }
+  .reveal .slides section, .reveal .slides section *{ box-sizing:border-box; }
+  html,body{ background:#ece2cd; }
+  .reveal{ font-family:'Inter',system-ui,sans-serif; color:var(--ink); font-size:30px; background:#ece2cd; }
+  .reveal .slides{ text-align:left; }
+  .reveal .slides section{
+    background:
+      radial-gradient(1200px 700px at 85% -10%, rgba(176,106,51,.06), transparent 60%),
+      radial-gradient(900px 600px at -10% 110%, rgba(95,107,52,.07), transparent 60%),
+      var(--cream);
+    border-radius:18px; padding:48px 56px; height:100%;
+    box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .reveal h1,.reveal h2,.reveal h3{ font-family:'Playfair Display',serif; color:var(--ink); letter-spacing:-.5px; line-height:1.05; margin:0 0 14px; text-transform:none; }
+  .reveal h1{ font-size:2.5em; color:var(--olive); font-weight:800; }
+  .reveal h2{ font-size:1.5em; font-weight:700; }
+  .reveal h2 .num{ font-size:.5em; color:var(--terra); font-weight:600; font-family:'Inter'; letter-spacing:2px; display:block; margin-bottom:6px; text-transform:uppercase; }
+  .reveal p,.reveal li{ color:var(--soft); }
+  .reveal strong{ color:var(--ink); }
+  .reveal em{ color:var(--terra); font-style:normal; font-weight:600; }
+  .reveal a{ color:var(--terra); }
+  .reveal ul{ margin:0; } .reveal li{ margin:.4em 0; }
+  .lead{ font-size:1.1em; color:var(--soft); }
+  .tag{ display:inline-block; font-size:.5em; font-weight:600; color:var(--ink); background:var(--paper);
+        border:1px solid var(--line); border-radius:999px; padding:5px 14px; margin:4px 6px 4px 0; }
+  .chip{ display:inline-block; width:14px; height:14px; border-radius:4px; vertical-align:middle; margin-right:6px; }
+  .pill{ display:inline-block; font-family:'Inter'; font-size:.42em; font-weight:700; letter-spacing:1.5px;
+         text-transform:uppercase; color:#7a5a1e; background:var(--yellow); border-radius:999px; padding:4px 12px; }
+  .grid2{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:28px; align-items:center; }
+  .grid2 img{ border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(52,48,31,.12);
+              max-height:540px; object-fit:cover; object-position:top left; width:100%; }
+  .card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 22px; }
+  .small{ font-size:.62em; } .mini{ font-size:.5em; color:var(--soft); }
+  .reveal code{ font-family:ui-monospace,Menlo,monospace; background:#efe7d4; color:#7a4b22; padding:1px 7px; border-radius:5px; font-size:.85em; }
+  .mermaid{ display:flex; justify-content:center; width:100%; overflow:hidden; }
+  .mermaid svg{ max-width:100% !important; max-height:58vh; height:auto; }
+  .reveal .footer{ position:absolute; bottom:18px; left:56px; right:56px; display:flex; justify-content:space-between;
+                   font-size:.45em; color:#a79c80; font-family:'Inter'; letter-spacing:.5px; }
+  .reveal .progress{ color:var(--olive); }
+  .cover-badges .tag{ background:#fff; }
+  .dot{ color:var(--terra); }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+  <!-- 1 · Cover -->
+  <section data-auto-animate>
+    <span class="pill">Senior Full Stack Challenge · Turbo AI</span>
+    <h1 style="margin-top:24px;">Turbo&nbsp;Notes</h1>
+    <p class="lead" style="max-width:18ch;">A cozy little home for your charming notes — <em>with AI voice</em>.</p>
+    <p style="margin-top:18px;">
+      <span class="chip" style="background:var(--coral)"></span><span class="chip" style="background:var(--yellow)"></span><span class="chip" style="background:var(--teal)"></span><span class="chip" style="background:var(--lav)"></span>
+      <span class="mini">Django 5 · DRF · Postgres &nbsp;|&nbsp; Next.js 16 · TypeScript · TanStack Query</span>
+    </p>
+    <p class="cover-badges" style="margin-top:26px;">
+      <span class="tag">🔴 Live · notes.cardenas.pe</span>
+      <span class="tag">✓ Coverage 100%</span>
+      <span class="tag">✓ CI green</span>
+      <span class="tag">OWASP Top&nbsp;10</span>
+    </p>
+    <div class="footer"><span>Carlos Cárdenas</span><span>Technical exposition</span></div>
+  </section>
+
+  <!-- 2 · What it is -->
+  <section>
+    <h2><span class="num">01 · The build</span>What it is</h2>
+    <div class="grid2" style="grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);">
+      <ul class="small">
+        <li><strong>Per-user notes</strong> — JWT auth, owner-scoped data (404 not 403, no existence leaks).</li>
+        <li><strong>Autosave editor</strong> — no save button; born on the first keystroke, PATCHed on an 800 ms debounce.</li>
+        <li><strong>Color categories</strong> — instant recolor; sidebar counts &amp; filters.</li>
+        <li><strong>AI, live &amp; optional</strong> — Whisper dictation · TTS read-aloud · suggest-title / summarize · hands-free <em>"close my note"</em>.</li>
+        <li><strong>Graceful degradation</strong> — no key → free in-browser speech. AI is never a single point of failure.</li>
+      </ul>
+      <div class="card small">
+        <strong style="color:var(--olive)">Guiding principle</strong>
+        <p style="margin:.4em 0 0;">The right amount of engineering for the scope — clean layering, full coverage, documented tradeoffs, <em>no invented complexity</em>.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Turbo Notes</span><span>01 / 07</span></div>
+  </section>
+
+  <!-- 3 · Live demo -->
+  <section>
+    <h2><span class="num">02 · See it running</span>Live demo</h2>
+    <div class="grid2">
+      <img src="screenshots/03-board.png" alt="Board">
+      <ul class="small">
+        <li>🔴 <strong>notes.cardenas.pe</strong></li>
+        <li>Login <code>demo@turbo.ai</code> / <code>demo12345</code></li>
+        <li>Create a note → it <strong>autosaves</strong>; change category → recolors.</li>
+        <li>Dictate by mic · read aloud · suggest title / summarize.</li>
+        <li>Say <em>"close my note"</em> → AI names it, editor evaporates.</li>
+        <li>Uniform card grid · newest note flagged <span class="pill" style="font-size:.32em;padding:2px 8px;">Latest</span> · dark mode · infinite scroll.</li>
+      </ul>
+    </div>
+    <div class="footer"><span>Turbo Notes</span><span>02 / 07</span></div>
+  </section>
+
+  <!-- 4 · Architecture -->
+  <section>
+    <h2><span class="num">03 · How it fits together</span>Architecture</h2>
+    <div class="mermaid">
+flowchart TD
+    UI["Next.js 16 SPA<br/>React, TanStack Query, TS"]
+    CADDY["Caddy - HTTPS<br/>routes / and /api"]
+    WEB["Next.js standalone :3000"]
+    API["Django 5 + DRF :8000<br/>JWT, owner-scoped ViewSet"]
+    DB[("PostgreSQL 16")]
+    AI["OpenAI Whisper / TTS / gpt-4o-mini<br/>optional, key-gated"]
+    UI -->|HTTPS| CADDY
+    CADDY -->|web| WEB
+    CADDY -->|api + Bearer| API
+    API --> DB
+    API -.->|graceful| AI
+    </div>
+    <p class="mini" style="margin-top:6px;">Idiomatic DRF (ViewSet + serializers + models). Frontend layered <code>services → hooks → types</code> — mockable, unit-testable.</p>
+    <div class="footer"><span>Turbo Notes</span><span>03 / 07</span></div>
+  </section>
+
+  <!-- 5 · Key flow -->
+  <section>
+    <h2><span class="num">04 · A flow that shows the design</span>Voice → text, never a SPOF</h2>
+    <div class="mermaid">
+flowchart TB
+    Start["User clicks mic"] --> Check{"Whisper enabled?"}
+    Check -->|"yes + MediaRecorder"| Rec["Record audio → POST /transcribe<br/>→ OpenAI Whisper"]
+    Check -->|"no key / unsupported"| Web["Web Speech API<br/>free, in-browser"]
+    Rec --> Ins["Insert text → autosave"]
+    Web --> Ins
+    </div>
+    <p class="mini" style="margin-top:6px;">Same pattern for TTS, assist, and the hands-free command — every AI path falls back to a free one. Autosave does a single transparent token refresh on 401, then replays the request.</p>
+    <div class="footer"><span>Turbo Notes</span><span>04 / 07</span></div>
+  </section>
+
+  <!-- 6 · CI/CD -->
+  <section>
+    <h2><span class="num">05 · Always green before merge</span>CI/CD &amp; quality</h2>
+    <div class="grid2" style="grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);">
+      <div class="mermaid">
+flowchart TD
+    PR["Pull request"] --> CI["CI: lint, format, tests, build"]
+    PR --> CR["CodeRabbit<br/>AI review"]
+    PR --> QL["CodeQL<br/>security scan"]
+    CI --> G{"All green?"}
+    G -->|yes| M["Merge to main"]
+    G -->|no| F["Fix and push"] --> CI
+    M --> D["Deploy to VPS"] --> L(("Live"))
+      </div>
+      <ul class="small">
+        <li><strong>Gate</strong> — flake8 · black/isort · pytest <em>≥85% (now 100%)</em> · Jest · next build.</li>
+        <li><strong>CodeRabbit</strong> — free AI PR review.</li>
+        <li><strong>CodeQL</strong> — TS + Python security scan.</li>
+        <li><strong>Dependabot</strong> — weekly deps + security PRs.</li>
+      </ul>
+    </div>
+    <div class="footer"><span>Turbo Notes</span><span>05 / 07</span></div>
+  </section>
+
+  <!-- 7 · Deploy + k8s + close -->
+  <section>
+    <h2><span class="num">06 · Shipped, safely</span>Hardened deploy &amp; honest scope</h2>
+    <div class="grid2">
+      <div class="card small">
+        <strong style="color:var(--olive)">"Saneado" deploy</strong>
+        <ul style="margin:.4em 0 0; padding-left:18px;">
+          <li>Isolated Compose project on <code>127.0.0.1:3300</code> — safe beside other live apps.</li>
+          <li>Idempotent Caddy wiring · <strong>validate before reload</strong> — a bad edit never takes a site down.</li>
+          <li>Post-deploy <code>/api/health</code> check.</li>
+          <li>Secrets only in GitHub Actions, never in the repo.</li>
+        </ul>
+      </div>
+      <div class="card small">
+        <strong style="color:var(--olive)">On the <code>k8s/</code> folder</strong>
+        <p style="margin:.4em 0 0;">Kubernetes manifests are <em>documentation of the scale-out path, not the deployment in use</em>. The app runs as one isolated Compose stack — the right size today. The seam to Deployment + Service + HPA is shown, <strong>without overbuilding now.</strong></p>
+      </div>
+    </div>
+    <p class="mini" style="margin-top:10px;">Testing: backend <strong>pytest 100%</strong> (CI floor 85%, all OpenAI calls mocked) · frontend <strong>105 Jest tests</strong>. <span class="dot">●</span> Security: rate limiting, HSTS, audit log, OpenAI usage tracking, OWASP Top 10 write-up.</p>
+    <div class="footer"><span>Turbo Notes · notes.cardenas.pe</span><span>06 / 07</span></div>
+  </section>
+
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad:false, securityLevel:'loose', theme:'base',
+    themeVariables:{
+      fontFamily:'Inter, sans-serif', fontSize:'15px',
+      primaryColor:'#f4ecd8', primaryBorderColor:'#c9b88f', primaryTextColor:'#34301f',
+      lineColor:'#9a7b4a', secondaryColor:'#e8a06d', tertiaryColor:'#9bc1b0',
+    },
+  });
+  // reveal.css hides slides until init, so mermaid would lay out flowcharts in a
+  // zero-size container (NaN positions). Temporarily force the slides visible &
+  // sized, render mermaid, then remove the override and start reveal.
+  const ov = document.createElement('style');
+  ov.textContent = '.reveal .slides,.reveal .slides>section{display:block!important;position:static!important;visibility:visible!important;opacity:1!important;height:auto!important;transform:none!important;left:auto!important;top:auto!important;width:1180px!important}';
+  document.head.appendChild(ov);
+  try { await mermaid.run({ querySelector:'.mermaid' }); }
+  catch(e){ console.warn('mermaid:', e?.message || e); }
+  ov.remove();
+  Reveal.initialize({ hash:true, transition:'fade', controls:true, progress:true, slideNumber:false, width:1280, height:720, margin:0.03 });
+  window.__ready = true;
+</script>
+</body>
+</html>

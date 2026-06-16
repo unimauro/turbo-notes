@@ -4,10 +4,14 @@
 [![CodeQL](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml)
 [![Deploy to VPS](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml)
 [![AI review: CodeRabbit](https://img.shields.io/badge/AI%20review-CodeRabbit-ff570a)](https://coderabbit.ai)
+[![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
+![Tests](https://img.shields.io/badge/tests-backend%20100%25%20%C2%B7%20frontend%20105-blue)
 
 A production-quality notes application built for the Turbo AI Senior Full Stack Engineer challenge: Django 5 + DRF + PostgreSQL on the backend, Next.js (App Router) + TypeScript + TanStack Query on the frontend, JWT auth, per-user notes with color-coded categories, an autosaving editor — fully dockerized with CI, and styled to match the official prototype video (warm "cozy journal" design: cream paper, serif headings, pastel category cards, original kawaii illustrations).
 
 The guiding principle throughout: **the right amount of engineering for the scope** — clean layering, full test coverage, and documented tradeoffs, without inventing complexity the problem doesn't have.
+
+> 📄 **In a hurry?** See the [**Technical Overview**](docs/TECHNICAL-OVERVIEW.md) — a 5-minute tour (stack, demo, key diagrams, CI/CD) for reviewers.
 
 > **🔴 Live demo:** **[notes.cardenas.pe](https://notes.cardenas.pe)** — sign up, or log in with `demo@turbo.ai` / `demo12345` (backup: `demo2@turbo.ai` / `demo12345`). Each demo account is preloaded with sample notes.
 >
