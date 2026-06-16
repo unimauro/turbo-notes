@@ -35,10 +35,6 @@ import type { Category, CategoryRef, Note, NoteInput } from "@/types/note";
 
 export const AUTOSAVE_DELAY_MS = 800;
 
-// How long the gentle close (X / Escape) exit animation runs before the overlay
-// unmounts. Mirrors the `.editor-exit` keyframe duration in globals.css.
-export const EDITOR_EXIT_MS = 280;
-
 const FALLBACK_CATEGORY: CategoryRef = {
   id: -1,
   name: "Random Thoughts",
@@ -81,16 +77,23 @@ export default function NoteEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // ---- "Turbo close" hands-free command -----------------------------------
-  // Set when the AI-generated title is applied so the heading plays a one-shot
-  // "materialize" animation, and when the whole overlay is "evaporating" out.
-  const [titleMaterializing, setTitleMaterializing] = useState(false);
+  // Set while the whole editor overlay is "evaporating" out (under the
+  // forming-card transition) just before we call onClose().
   const [evaporating, setEvaporating] = useState(false);
-  // True while the hands-free flow is awaiting the AI title, so we can show a
-  // subtle "✨ Naming your note…" indicator until the title arrives.
-  const [namingTitle, setNamingTitle] = useState(false);
-  // Set while the gentle exit animation plays for a normal close (X / Escape),
-  // just before we call onClose() and the parent unmounts the overlay.
-  const [exiting, setExiting] = useState(false);
+  // ---- "Card being created" close transition ------------------------------
+  // On close — voice OR the X button — we briefly show a forming-card overlay
+  // (a card assembling itself with the note's title materializing) before the
+  // editor leaves and the real board card appears, so the hand-off reads as
+  // continuous. `forming` holds the snapshot rendered in that overlay (null =
+  // hidden); `formingNaming` shows the "Creating your card…" line while the AI
+  // is naming an untitled note; `formingSettle` plays the final settle-out beat.
+  const [forming, setForming] = useState<{
+    title: string;
+    color: string | undefined;
+    category: string | undefined;
+  } | null>(null);
+  const [formingNaming, setFormingNaming] = useState(false);
+  const [formingSettle, setFormingSettle] = useState(false);
 
   // Derived (no effect needed): user pick > note's category > seeded default.
   const category =
@@ -198,6 +201,20 @@ export default function NoteEditor({
   // matched the Whisper text. Cleared whenever the close actually fires.
   const pendingFinishRef = useRef(false);
 
+  // Bridges the gap between "finish phrase heard" and "Whisper transcript
+  // appended". Whisper is batch: the transcript only arrives (via
+  // appendDictation) AFTER we stop the recorder, which can take >4s for a long
+  // clip. turboClose awaits this promise before reading latestRef.content for
+  // title-gen, so the title is always generated from the FINAL dictated text
+  // instead of racing a fixed timer. Created in handleWhisperCommand right after
+  // stopping Whisper; resolved by appendDictation once it appends. The free
+  // Web-Speech path never sets this (its transcript is already in latestRef
+  // synchronously), so turboClose's await resolves immediately / is skipped.
+  const pendingTranscriptRef = useRef<{
+    promise: Promise<void>;
+    resolve: () => void;
+  } | null>(null);
+
   const closingRef = useRef(false);
   async function handleClose() {
     if (closingRef.current) return; // ignore double-clicks while flushing
@@ -212,20 +229,36 @@ export default function NoteEditor({
     } catch {
       ok = false;
     }
-    if (ok) {
-      setSaveError(null);
-      // Play the gentle exit animation, THEN unmount. We keep closingRef held
-      // through the animation so a second X/Escape can't double-trigger.
-      setExiting(true);
-      await new Promise((resolve) => setTimeout(resolve, EDITOR_EXIT_MS));
-      closingRef.current = false;
-      onClose();
-    } else {
+    if (!ok) {
       closingRef.current = false;
       // Keep the editor open so the user can retry; their text is still here.
       // (Flush failed — do NOT animate or close: no data loss.)
       setSaveError("Couldn't save your changes. Please try again.");
+      return;
     }
+
+    setSaveError(null);
+
+    // Play the "card being created" forming-card transition, THEN unmount. For
+    // consistency with the voice path, an untitled note with content gets named
+    // by AI (when enabled) inside the overlay — but it's best-effort: the assist
+    // call resolves to "" on failure so the X close is never blocked. We keep
+    // closingRef held through the animation so a second X/Escape can't
+    // double-trigger.
+    await playFormingCard(
+      assistEnabled
+        ? async () => {
+            const body = latestRef.current.content.trim();
+            if (!body) return "";
+            try {
+              return await assist(body, "title");
+            } catch {
+              return "";
+            }
+          }
+        : undefined,
+    );
+    closingRef.current = false;
   }
 
   // Lets handleClose() (declared before the speak logic) stop read-aloud audio.
@@ -416,6 +449,14 @@ export default function NoteEditor({
       // A working append means any prior transcribe error is stale; clear it.
       setTranscribeError(null);
 
+      // The (possibly delayed) Whisper transcript has now landed in latestRef.
+      // Release turboClose, which may be awaiting it before title-gen, so it
+      // reads the FINAL content rather than racing the safety-net timer.
+      if (pendingTranscriptRef.current) {
+        pendingTranscriptRef.current.resolve();
+        pendingTranscriptRef.current = null;
+      }
+
       // Fire the close sequence when EITHER the transcript itself contained the
       // command, OR the real-time listener already heard it (pendingFinishRef)
       // and stopped recording — in which case Whisper's text may not contain
@@ -468,13 +509,35 @@ export default function NoteEditor({
   // recorder — its normal pipeline (upload -> transcript -> appendDictation)
   // then strips the command words and runs the close — and set pendingFinishRef
   // so the close fires even if Whisper's transcript doesn't contain the exact
-  // words. A short safety-net timer guarantees the close even if Whisper yields
-  // no transcript at all (empty clip / transcription failure).
+  // words.
+  //
+  // Crucially, we ALSO arm a pendingTranscriptRef promise here: turboClose
+  // awaits it (up to its own 8s cap) before reading the content for title-gen,
+  // so on a long note the title is generated from the FINAL transcript instead
+  // of empty content. The appendDictation that lands the transcript resolves
+  // this promise and (seeing pendingFinishRef) runs the close — so on the happy
+  // path turboClose is invoked only after content exists.
+  //
+  // The safety-net timer is now only a last resort that guarantees the close is
+  // STARTED even if appendDictation never fires (so a stalled upload can't leave
+  // the editor stuck). It deliberately does NOT resolve the transcript promise:
+  // it just kicks off turboClose, which then awaits the still-pending transcript
+  // up to its 8s cap. If the transcript arrives in that window, the title is
+  // generated from real content; if Whisper genuinely yields nothing, the cap
+  // elapses and turboClose closes with empty content (title correctly skipped).
   const handleWhisperCommand = useCallback(() => {
     if (turboClosingRef.current || pendingFinishRef.current) return;
     pendingFinishRef.current = true;
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    pendingTranscriptRef.current = { promise, resolve };
     whisperStopRef.current?.();
     setTimeout(() => {
+      // Last resort: appendDictation hasn't run yet. Start the close anyway —
+      // turboClose will await the (still-pending) transcript promise up to its
+      // own cap, so a transcript that lands shortly after still names the note.
       if (pendingFinishRef.current && !turboClosingRef.current) {
         turboClosingRef.current = true;
         pendingFinishRef.current = false;
@@ -618,12 +681,76 @@ export default function NoteEditor({
     setSummary(null);
   }
 
-  // ---- "Turbo close" sequence ---------------------------------------------
+  // ---- "Card being created" forming-card transition -----------------------
+  // Shared close finale used by BOTH the voice (turboClose) and X/Escape
+  // (handleClose) paths: evaporate the editor, reveal a centered forming-card
+  // overlay (tinted with the note's category color), optionally name an untitled
+  // note with AI WHILE the overlay shows a "Creating your card…" line (the title
+  // then materializes in its place), hold a beat, then settle into the board and
+  // call onClose(). Reduced-motion degrades to a plain fade (CSS) but the title
+  // still shows. Resilient: a failing assist or flush never throws — it always
+  // ends in onClose().
+  //
+  // `nameTitle` (optional): when provided AND the snapshot has no title but has
+  // content, it's awaited to fetch a title (shown materializing in the card).
+  // It must never throw (callers wrap their assist call) and may return "" to
+  // mean "no title produced".
+  const playFormingCard = useCallback(
+    async (nameTitle?: () => Promise<string>) => {
+      const snapshot = latestRef.current;
+      const hasTitle = !!snapshot.title.trim();
+      const willName = !hasTitle && !!snapshot.content.trim() && !!nameTitle;
+
+      setForming({
+        title: snapshot.title.trim() || "Untitled",
+        color: snapshot.category?.color,
+        category: snapshot.category?.name,
+      });
+      setFormingNaming(willName);
+      // Evaporate the editor out from under the overlay.
+      setEvaporating(true);
+      await new Promise((resolve) => setTimeout(resolve, 360));
+
+      // Name the untitled note while the overlay shows "Creating your card…".
+      if (willName && nameTitle) {
+        const suggestion = (await nameTitle()).trim();
+        if (suggestion) {
+          setTitle(suggestion);
+          const latest = latestRef.current;
+          scheduleSave({
+            title: suggestion,
+            content: latest.content,
+            category: latest.category,
+          });
+          // Swap the line for the title, which materializes into the card.
+          setForming((f) => (f ? { ...f, title: suggestion } : f));
+        }
+        setFormingNaming(false);
+      }
+
+      // Hold the formed card so the materialized title reads before hand-off.
+      await new Promise((resolve) => setTimeout(resolve, 620));
+      // Settle the overlay into the board, then unmount.
+      setFormingSettle(true);
+      await new Promise((resolve) => setTimeout(resolve, 320));
+      try {
+        await flush();
+      } catch {
+        // Close regardless of a late flush failure (the note already saved its
+        // content; the title autosaves on the next change if this slips).
+      }
+      onClose();
+    },
+    [flush, onClose, scheduleSave],
+  );
+
+  // ---- "Turbo close" sequence (voice) -------------------------------------
   // Triggered hands-free from the dictation/Whisper transcript (see
-  // appendDictation). Stops capture, optionally generates a title with AI,
-  // plays the title-materialize + overlay-evaporation animations, flushes, and
-  // closes. Resilient end-to-end: a failing assist or flush never leaves the
-  // editor stuck — we always evaporate and call onClose().
+  // appendDictation). Stops capture, AWAITS the pending Whisper transcript (so
+  // the title is generated from the final dictated content, not a racing
+  // timer), optionally generates a title with AI, then plays the forming-card
+  // transition. Resilient end-to-end: a failing assist, missing content, or a
+  // transcript timeout never leaves the editor stuck — we always close.
   const turboClose = useCallback(async () => {
     // Silence every capture/playback path before doing anything else.
     whisperStop();
@@ -632,58 +759,42 @@ export default function NoteEditor({
     setSpeaking(false);
     setSpeakLoading(false);
 
-    // (2) Generate a title with AI only when the title is empty and assist is on.
-    let titleAppeared = false;
-    const snapshot = latestRef.current;
-    if (!snapshot.title.trim() && assistEnabled) {
-      const body = snapshot.content.trim();
-      if (body) {
-        // Show the "✨ Naming your note…" indicator while the AI is working.
-        setNamingTitle(true);
-        try {
-          const suggestion = (await assist(body, "title")).trim();
-          if (suggestion) {
-            setTitle(suggestion);
-            // Persist via the same latestRef + scheduleSave path used elsewhere.
-            const latest = latestRef.current;
-            scheduleSave({
-              title: suggestion,
-              content: latest.content,
-              category: latest.category,
-            });
-            // (3) Play the one-shot title "materialize" animation.
-            setTitleMaterializing(true);
-            titleAppeared = true;
-          }
-        } catch {
-          // Never block closing on an assist failure.
-        } finally {
-          // The indicator's job is done the moment we have (or fail to get) a
-          // title — the title itself now materializes in its place.
-          setNamingTitle(false);
-        }
-      }
+    // Wait for the (possibly delayed) Whisper transcript to land in latestRef
+    // before reading the content for title-gen. On the free Web-Speech path the
+    // transcript is already in latestRef synchronously, so there's no pending
+    // promise and this resolves immediately. The 8s cap guarantees we never
+    // hang if appendDictation somehow never fires.
+    const pending = pendingTranscriptRef.current?.promise;
+    if (pending) {
+      await Promise.race([
+        pending,
+        new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+      ]);
     }
 
-    // (4) Hold so the user sees the title materialize before the editor leaves.
-    // Give the freshly-named title a longer beat (matches the materialize
-    // keyframe + a gentle pause); otherwise a short beat is enough.
-    await new Promise((resolve) => setTimeout(resolve, titleAppeared ? 1100 : 500));
-    setEvaporating(true);
-    await new Promise((resolve) => setTimeout(resolve, 520));
-    try {
-      await flush();
-    } catch {
-      // Hands-free convenience: close regardless.
-    }
-    onClose();
+    // Hand off to the shared forming-card finale; it names the (now-final)
+    // untitled content with AI — when enabled — inside the overlay. assist
+    // failures resolve to "" so the close never blocks.
+    await playFormingCard(
+      assistEnabled
+        ? async () => {
+            const body = latestRef.current.content.trim();
+            if (!body) return "";
+            try {
+              return await assist(body, "title");
+            } catch {
+              return "";
+            }
+          }
+        : undefined,
+    );
   }, [
     whisperStop,
     dictationStop,
     assistEnabled,
-    scheduleSave,
-    flush,
-    onClose,
+    playFormingCard,
+    setSpeaking,
+    setSpeakLoading,
   ]);
 
   // Expose the latest turboClose to appendDictation (declared earlier). Written
@@ -729,11 +840,7 @@ export default function NoteEditor({
       aria-label={note ? "Edit note" : "New note"}
       onKeyDown={handleKeyDown}
       className={`fixed inset-0 z-40 flex flex-col bg-cream px-4 py-4 sm:px-8 sm:py-6 dark:bg-bark ${
-        evaporating
-          ? "turbo-evaporate"
-          : exiting
-            ? "editor-exit"
-            : "editor-enter"
+        evaporating ? "turbo-evaporate" : "editor-enter"
       }`}
     >
       <header className="flex items-center justify-between">
@@ -849,21 +956,8 @@ export default function NoteEditor({
             });
           }}
           placeholder="Note Title"
-          className={`mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none ${
-            titleMaterializing ? "turbo-materialize" : ""
-          }`}
+          className="mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none"
         />
-
-        {namingTitle && (
-          <p
-            role="status"
-            aria-live="polite"
-            className="mt-2 inline-flex items-center gap-1.5 text-sm italic text-ink/60 dark:text-linen/60"
-          >
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Naming your note…
-          </p>
-        )}
 
         {assistEnabled && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1089,6 +1183,80 @@ export default function NoteEditor({
               )}
             </>
           )}
+        </div>
+      </div>
+
+      {forming && (
+        <FormingCard
+          title={forming.title}
+          color={forming.color}
+          category={forming.category}
+          naming={formingNaming}
+          settling={formingSettle}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Card being created" overlay shown on close (voice OR X). A centered card
+ * assembles itself — tinted with the note's category color, serif title — over
+ * a soft scrim, holds a beat, then settles into the board as `onClose()` runs.
+ * While an untitled note is being named by AI, a subtle "✨ Creating your card…"
+ * line shows until the title materializes in its place. Reduced motion degrades
+ * to a plain fade (see `.forming-*` rules in globals.css) but title + text
+ * still show.
+ */
+function FormingCard({
+  title,
+  color,
+  category,
+  naming,
+  settling,
+}: {
+  title: string;
+  color: string | undefined;
+  category: string | undefined;
+  naming: boolean;
+  settling: boolean;
+}) {
+  const palette = categoryPalette(color);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Creating your card"
+      className={`pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-cream/55 backdrop-blur-[2px] dark:bg-bark/55 ${
+        settling ? "forming-scrim-out" : "forming-scrim-in"
+      }`}
+    >
+      <div
+        style={{ backgroundColor: palette.bg, borderColor: palette.border }}
+        className={`tinted flex h-64 w-72 flex-col overflow-hidden rounded-xl border p-5 shadow-xl ${
+          settling ? "forming-card-settle" : "forming-card-in"
+        }`}
+      >
+        <p className="text-xs font-bold text-ink/80">
+          {category ?? "New note"}
+        </p>
+
+        {naming ? (
+          <p className="mt-3 inline-flex items-center gap-1.5 text-sm italic text-ink/70">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            Creating your card…
+          </p>
+        ) : (
+          <h3 className="turbo-materialize mt-3 line-clamp-3 break-words font-serif text-xl font-bold leading-snug text-ink">
+            {title}
+          </h3>
+        )}
+
+        {/* Soft "assembling" shimmer lines that fill the card body. */}
+        <div className="mt-4 flex-1 space-y-2" aria-hidden="true">
+          <span className="forming-shimmer block h-2.5 w-5/6 rounded-full bg-ink/10" />
+          <span className="forming-shimmer block h-2.5 w-2/3 rounded-full bg-ink/10" />
+          <span className="forming-shimmer block h-2.5 w-3/4 rounded-full bg-ink/10" />
         </div>
       </div>
     </div>

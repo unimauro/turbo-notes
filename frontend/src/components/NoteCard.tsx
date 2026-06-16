@@ -49,7 +49,7 @@ export default function NoteCard({
       style={{ backgroundColor: palette.bg, borderColor: palette.border }}
       className={`tinted group relative flex h-72 cursor-pointer flex-col overflow-hidden rounded-xl border p-5 transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-ink/30 ${
         isLatest
-          ? "ring-2 ring-amber-400/80 ring-offset-2 ring-offset-cream dark:ring-offset-bark"
+          ? "board-pop ring-2 ring-amber-400/80 ring-offset-2 ring-offset-cream dark:ring-offset-bark"
           : ""
       }`}
     >
