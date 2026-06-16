@@ -78,6 +78,11 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    # CSRF protection. The REST API is JWT-only (no SessionAuthentication) and
+    # DRF marks its views csrf_exempt, so bearer-token requests are unaffected;
+    # this guards the *session-based Django admin* (/admin/) against CSRF, which
+    # would otherwise be exploitable. (CodeQL py/csrf-protection-disabled.)
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
