@@ -27,12 +27,22 @@ jest.mock("@/services/tts", () => ({
   speak: jest.fn(),
 }));
 
+// AI assist is disabled by default in these tests; the editor must hide the
+// suggest-title / summarize buttons entirely.
+jest.mock("@/services/assist", () => ({
+  getAssistEnabled: jest.fn().mockResolvedValue(false),
+  assist: jest.fn(),
+}));
+
 import NoteEditor, { AUTOSAVE_DELAY_MS } from "@/components/NoteEditor";
+import { assist, getAssistEnabled } from "@/services/assist";
 import { createNote, updateNote } from "@/services/notes";
 import type { Category, Note } from "@/types/note";
 
 const createNoteMock = createNote as jest.Mock;
 const updateNoteMock = updateNote as jest.Mock;
+const getAssistEnabledMock = getAssistEnabled as jest.Mock;
+const assistMock = assist as jest.Mock;
 
 const categories: Category[] = [
   { id: 1, name: "Random Thoughts", color: "coral", note_count: 0 },
@@ -260,6 +270,53 @@ describe("NoteEditor autosave", () => {
       delete (window as unknown as { speechSynthesis?: unknown })
         .speechSynthesis;
     }
+  });
+
+  it("hides the AI assist buttons when assist is disabled", async () => {
+    // getAssistEnabled resolves false (mocked above), so neither button renders.
+    renderEditor(savedNote);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /suggest a title/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /summarize note/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("suggests a title and autosaves it when assist is enabled", async () => {
+    getAssistEnabledMock.mockResolvedValueOnce(true);
+    assistMock.mockResolvedValueOnce("A Crisp Title");
+    updateNoteMock.mockResolvedValue(savedNote);
+    renderEditor(savedNote);
+
+    // Let the GET /assist/ availability probe resolve so the buttons render.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole("button", { name: /suggest a title/i });
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+
+    // The suggestion landed in the title field...
+    expect(screen.getByPlaceholderText("Note Title")).toHaveValue("A Crisp Title");
+    expect(assistMock).toHaveBeenCalledWith(expect.any(String), "title");
+
+    // ...and it autosaves via the same latestRef + scheduleSave path.
+    await act(async () => {
+      jest.advanceTimersByTime(AUTOSAVE_DELAY_MS);
+    });
+    expect(updateNoteMock).toHaveBeenCalledWith(42, {
+      title: "A Crisp Title",
+      content: "",
+      category_id: 1,
+    });
   });
 
   it("changing the category schedules a save too", async () => {

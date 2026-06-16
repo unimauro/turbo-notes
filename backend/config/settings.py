@@ -235,6 +235,14 @@ TTS_ENABLED = bool(OPENAI_API_KEY)
 # Reject TTS requests longer than this (keeps responses fast/cheap).
 TTS_MAX_CHARS = 4000
 
+# --- AI assist ("suggest a title" / "summarize") ----------------------------
+# Reuses OPENAI_API_KEY / OPENAI_BASE_URL above. When no key is configured the
+# /assist/ endpoint is disabled and the frontend hides the assist affordances.
+OPENAI_ASSIST_MODEL = os.environ.get("OPENAI_ASSIST_MODEL", "gpt-4o-mini").strip()
+
+# True only when an API key is configured; gates the /assist/ endpoint.
+ASSIST_ENABLED = bool(OPENAI_API_KEY)
+
 # --- Production security hardening -------------------------------------------
 # Only applied when DEBUG is False so local development and the test suite
 # (which run with DEBUG=True) are untouched. The app runs behind Caddy, which

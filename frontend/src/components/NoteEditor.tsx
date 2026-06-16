@@ -1,6 +1,16 @@
 "use client";
 
-import { Check, ChevronDown, Headphones, Mic, Square, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Headphones,
+  Loader2,
+  Mic,
+  Sparkles,
+  Square,
+  Text,
+  X,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,6 +26,7 @@ import { useWhisperRecorder } from "@/hooks/useWhisperRecorder";
 import { categoryPalette } from "@/lib/colors";
 import { loadVoices, pickVoice, speakWithBrowser } from "@/lib/speech";
 import { formatEditorTimestamp } from "@/lib/time";
+import { assist, getAssistEnabled } from "@/services/assist";
 import type { ListNotesParams } from "@/services/notes";
 import { getTranscriptionEnabled } from "@/services/transcription";
 import { getTtsEnabled, speak } from "@/services/tts";
@@ -433,6 +444,85 @@ export default function NoteEditor({
     else dictation.start();
   }
 
+  // ---- AI assist (suggest a title / summarize) ----------------------------
+  // Preferred path only (no free fallback like dictation/TTS have): when the
+  // backend reports `enabled: false` (no API key) the buttons are simply hidden.
+  // We decide availability ONCE on open (GET /assist/).
+  const [assistEnabled, setAssistEnabled] = useState(false);
+  // Independent loading flags so one action's spinner doesn't disable the other.
+  const [titleLoading, setTitleLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [assistError, setAssistError] = useState<string | null>(null);
+  // The summary is shown non-destructively in a dismissible inline card.
+  const [summary, setSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAssistEnabled()
+      .then((enabled) => {
+        if (!cancelled) setAssistEnabled(enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setAssistEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // There's only something worth assisting once there is some text.
+  const assistHasText = Boolean(noteText());
+
+  // "Suggest title": send title+content (or just content), set the title field
+  // through the same latestRef + scheduleSave path the other handlers use so it
+  // autosaves and isn't clobbered by a concurrent dictation/field write.
+  function handleSuggestTitle() {
+    const text = noteText();
+    if (!text || titleLoading) return;
+    setAssistError(null);
+    setTitleLoading(true);
+    assist(text, "title")
+      .then((suggestion) => {
+        const next = suggestion.trim();
+        if (!next) return;
+        setTitle(next);
+        const snapshot = latestRef.current;
+        scheduleSave({
+          title: next,
+          content: snapshot.content,
+          category: snapshot.category,
+        });
+      })
+      .catch(() => setAssistError("Couldn't suggest a title. Please try again."))
+      .finally(() => setTitleLoading(false));
+  }
+
+  // "Summarize": show the summary in a dismissible card (non-destructive).
+  function handleSummarize() {
+    const text = noteText();
+    if (!text || summaryLoading) return;
+    setAssistError(null);
+    setSummaryLoading(true);
+    assist(text, "summary")
+      .then((result) => setSummary(result.trim() || null))
+      .catch(() => setAssistError("Couldn't summarize. Please try again."))
+      .finally(() => setSummaryLoading(false));
+  }
+
+  // Prepend "Summary: <text>" to the note content, via latestRef + scheduleSave.
+  function insertSummary() {
+    if (!summary) return;
+    const snapshot = latestRef.current;
+    const next = `Summary: ${summary}\n\n${snapshot.content}`;
+    setContent(next);
+    scheduleSave({
+      title: snapshot.title,
+      content: next,
+      category: snapshot.category,
+    });
+    setSummary(null);
+  }
+
   // ---- UI -----------------------------------------------------------------
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -584,6 +674,74 @@ export default function NoteEditor({
           placeholder="Note Title"
           className="mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none"
         />
+
+        {assistEnabled && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSuggestTitle}
+              disabled={!assistHasText || titleLoading}
+              aria-busy={titleLoading}
+              aria-label="Suggest a title"
+              className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 bg-paper/60 px-3 py-1.5 text-xs font-semibold text-ink/80 transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50 dark:border-linen/15 dark:bg-bark-soft/50 dark:text-linen/80 dark:hover:bg-bark-soft"
+            >
+              {titleLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Suggest title
+            </button>
+            <button
+              type="button"
+              onClick={handleSummarize}
+              disabled={!assistHasText || summaryLoading}
+              aria-busy={summaryLoading}
+              aria-label="Summarize note"
+              className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 bg-paper/60 px-3 py-1.5 text-xs font-semibold text-ink/80 transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50 dark:border-linen/15 dark:bg-bark-soft/50 dark:text-linen/80 dark:hover:bg-bark-soft"
+            >
+              {summaryLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Text className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Summarize
+            </button>
+            {assistError && (
+              <span role="status" className="text-xs text-red-600 dark:text-red-400">
+                {assistError}
+              </span>
+            )}
+          </div>
+        )}
+
+        {summary && (
+          <div
+            role="status"
+            className="mt-3 rounded-xl border border-ink/15 bg-paper/70 p-3 text-sm text-ink/85 dark:border-linen/15 dark:bg-bark-soft/60 dark:text-linen/85"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="flex-1 leading-relaxed">{summary}</p>
+              <button
+                type="button"
+                onClick={() => setSummary(null)}
+                aria-label="Dismiss summary"
+                className="-mt-0.5 rounded-full p-1 text-ink/60 transition-colors hover:bg-ink/10 dark:text-linen/60 dark:hover:bg-linen/10"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={insertSummary}
+                className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-cream transition-colors hover:bg-ink-soft"
+              >
+                Insert
+              </button>
+            </div>
+          </div>
+        )}
 
         <label htmlFor="editor-content" className="sr-only">
           Note content
