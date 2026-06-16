@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -44,8 +45,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => false,
   );
 
-  const login = useCallback((tokens: TokenPair) => setTokens(tokens), []);
-  const logout = useCallback(() => clearTokens(), []);
+  const queryClient = useQueryClient();
+
+  // Wipe cached data on every auth transition so one account's notes can never
+  // flash into another's session (e.g. logging in as a different user). Without
+  // this, TanStack Query's cache from the previous user shows for a beat before
+  // the new fetch resolves.
+  const login = useCallback(
+    (tokens: TokenPair) => {
+      queryClient.clear();
+      setTokens(tokens);
+    },
+    [queryClient],
+  );
+  const logout = useCallback(() => {
+    clearTokens();
+    queryClient.clear();
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({ ready, isAuthenticated, login, logout }),
