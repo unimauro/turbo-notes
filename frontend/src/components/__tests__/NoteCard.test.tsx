@@ -52,6 +52,30 @@ describe("NoteCard", () => {
     expect(onEdit).toHaveBeenCalledWith(note);
   });
 
+  it("clamps the title to keep cards uniform", () => {
+    render(<NoteCard note={note} onEdit={jest.fn()} onDelete={jest.fn()} />);
+
+    expect(screen.getByText("Groceries")).toHaveClass("line-clamp-3");
+  });
+
+  it("shows the 'latest' highlight ring + pill only when isLatest", () => {
+    const { rerender } = render(
+      <NoteCard note={note} onEdit={jest.fn()} onDelete={jest.fn()} />,
+    );
+
+    let card = screen.getByRole("button", { name: /edit note: groceries/i });
+    expect(card).not.toHaveClass("ring-amber-400/80");
+    expect(screen.queryByText("Latest")).not.toBeInTheDocument();
+
+    rerender(
+      <NoteCard note={note} onEdit={jest.fn()} onDelete={jest.fn()} isLatest />,
+    );
+
+    card = screen.getByRole("button", { name: /edit note: groceries/i });
+    expect(card).toHaveClass("ring-2", "ring-amber-400/80", "ring-offset-2");
+    expect(screen.getByText("Latest")).toBeInTheDocument();
+  });
+
   it("calls onDelete (not onEdit) when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onEdit = jest.fn();

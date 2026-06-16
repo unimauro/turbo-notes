@@ -85,6 +85,9 @@ export default function NoteEditor({
   // "materialize" animation, and when the whole overlay is "evaporating" out.
   const [titleMaterializing, setTitleMaterializing] = useState(false);
   const [evaporating, setEvaporating] = useState(false);
+  // True while the hands-free flow is awaiting the AI title, so we can show a
+  // subtle "✨ Naming your note…" indicator until the title arrives.
+  const [namingTitle, setNamingTitle] = useState(false);
   // Set while the gentle exit animation plays for a normal close (X / Escape),
   // just before we call onClose() and the parent unmounts the overlay.
   const [exiting, setExiting] = useState(false);
@@ -630,10 +633,13 @@ export default function NoteEditor({
     setSpeakLoading(false);
 
     // (2) Generate a title with AI only when the title is empty and assist is on.
+    let titleAppeared = false;
     const snapshot = latestRef.current;
     if (!snapshot.title.trim() && assistEnabled) {
       const body = snapshot.content.trim();
       if (body) {
+        // Show the "✨ Naming your note…" indicator while the AI is working.
+        setNamingTitle(true);
         try {
           const suggestion = (await assist(body, "title")).trim();
           if (suggestion) {
@@ -647,15 +653,22 @@ export default function NoteEditor({
             });
             // (3) Play the one-shot title "materialize" animation.
             setTitleMaterializing(true);
+            titleAppeared = true;
           }
         } catch {
           // Never block closing on an assist failure.
+        } finally {
+          // The indicator's job is done the moment we have (or fail to get) a
+          // title — the title itself now materializes in its place.
+          setNamingTitle(false);
         }
       }
     }
 
-    // (4) Brief beat so the user sees the title appear, then evaporate + close.
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    // (4) Hold so the user sees the title materialize before the editor leaves.
+    // Give the freshly-named title a longer beat (matches the materialize
+    // keyframe + a gentle pause); otherwise a short beat is enough.
+    await new Promise((resolve) => setTimeout(resolve, titleAppeared ? 1100 : 500));
     setEvaporating(true);
     await new Promise((resolve) => setTimeout(resolve, 520));
     try {
@@ -840,6 +853,17 @@ export default function NoteEditor({
             titleMaterializing ? "turbo-materialize" : ""
           }`}
         />
+
+        {namingTitle && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm italic text-ink/60 dark:text-linen/60"
+          >
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            Naming your note…
+          </p>
+        )}
 
         {assistEnabled && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
