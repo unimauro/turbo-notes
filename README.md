@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/unimauro/turbo-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml)
-[![Deploy to VPS](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml)
+[![Live demo](https://img.shields.io/badge/demo-notes.cardenas.pe-e8704a)](https://notes.cardenas.pe)
 [![AI review: CodeRabbit](https://img.shields.io/badge/AI%20review-CodeRabbit-ff570a)](https://coderabbit.ai)
 [![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
 ![Tests](https://img.shields.io/badge/tests-backend%20100%25%20%C2%B7%20frontend%20105-blue)
@@ -148,7 +148,7 @@ flowchart LR
     CI --> GATE{"All green?"}
     GATE -->|yes| MERGE["Merge to main"]
     GATE -->|no| FIX["Fix & push"] --> CI
-    MERGE --> DEP["Deploy to VPS<br/>deploy-vps.yml"]
+    MERGE --> DEP["Deploy green main<br/>self-hosted runner / manual tar+ssh"]
     DEP --> LIVE(("notes.cardenas.pe"))
 ```
 
@@ -167,14 +167,16 @@ flowchart LR
 
 > **Runtime error monitoring** is a natural next layer: **Sentry**'s free tier (5k events/mo) would capture frontend + Django exceptions in production. Wired behind a `SENTRY_DSN` env var so it stays off until a key is set — same graceful-degradation pattern as the AI features.
 
-**Hardened ("saneado") deploy** (`.github/workflows/deploy-vps.yml`) — on merge to `main` (or manual `workflow_dispatch`) the stack deploys over SSH, designed to be safe on a server that hosts other live apps:
+**Production is never touched directly by a PR.** A change reaches the live site only after it is reviewed and merges a green `main` — CI is the gate. So a broken or malicious PR can fail its checks (or its review) and simply never ship; the running server is never exposed to un-merged code. That safety property is the point of the pipeline, more than the automation itself.
+
+**The deploy itself** is a single, idempotent step (`deploy/` + `docker-compose.vps.yml`), hardened to be safe on a server that already hosts other live apps:
 
 - **Isolated** — its own Compose project, network and volume, bound only to `127.0.0.1:3300`; it can't collide with neighbours.
 - **Idempotent Caddy wiring** — adds the `notes.cardenas.pe` block only if absent, then **`caddy validate` before `reload`** — a bad edit is rejected, never taking down other sites; reload (not restart) so existing certs/connections survive.
-- **Health-checked** — after `up -d --build` it curls `/api/health` and fails the job if the app isn't serving.
-- **Secrets** live only in GitHub Actions secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`) — never in the repo; the `.env` is written on the box at deploy time with `chmod 600`.
+- **Health-checked** — after `up -d --build` it curls `/api/health` and aborts if the app isn't serving.
+- **Secrets** never live in the repo; the `.env` is written on the box at deploy time with `chmod 600`.
 
-> First-time setup: add those five repository secrets under **Settings → Secrets and variables → Actions**, and (recommended) protect `main` with a branch rule requiring the **Backend** and **Frontend** CI checks to pass before merge.
+> **How it actually ships.** This VPS firewalls inbound SSH, so a stock GitHub-hosted runner can't push to it (`deploy-vps.yml` is provided as a reference and runs the steps above, but a push-from-CI hit a connection timeout against the locked-down port 22 — by design). The honest, production-safe options for a firewalled host are a **self-hosted runner on the VPS** (outbound-only — no inbound SSH, and the SSH key never leaves the box) or a **manual `tar | ssh` deploy from a trusted machine** of the already-merged `main`. The current live site is shipped this way. Auto-deploy-on-merge is a follow-up (self-hosted runner), not a claim made here.
 
 ## Design fidelity
 

@@ -109,13 +109,15 @@ flowchart LR
     CI --> GATE{"All green?"}
     GATE -->|yes| MERGE["Merge to main"]
     GATE -->|no| FIX["Fix & push"] --> CI
-    MERGE --> DEP["Deploy to VPS"]
+    MERGE --> DEP["Deploy green main<br/>runner / manual"]
     DEP --> LIVE(("notes.cardenas.pe"))
 ```
 
+> **Production is never touched directly by a PR** — a change ships only after review + green `main`, so a broken PR simply never reaches the server. The deploy step itself (`deploy/` + `docker-compose.vps.yml`) is idempotent and health-checked. This VPS firewalls inbound SSH, so it's shipped via a manual `tar | ssh` of the merged `main` (or a self-hosted, outbound-only runner) — auto-deploy-on-merge is a documented follow-up, not a claim.
+
 - **CI gate** — backend (`flake8` · `black`/`isort` · `pytest` with an 85% coverage floor, currently **100%**) and frontend (`lint` · Jest · `next build`).
 - **CodeRabbit** — free AI PR review. **CodeQL** — static security/quality scan (TS + Python). **Dependabot** — weekly dependency + security PRs.
-- **Hardened deploy** — isolated Compose project on `127.0.0.1:3300`; idempotent Caddy wiring with `caddy validate` **before** reload (a bad edit never takes down neighbouring sites); post-deploy `/api/health` check; secrets only in GitHub Actions.
+- **Hardened deploy** — isolated Compose project on `127.0.0.1:3300`; idempotent Caddy wiring with `caddy validate` **before** reload (a bad edit never takes down neighbouring sites); post-deploy `/api/health` check; secrets written to the box's `.env` at deploy time, never in the repo.
 
 ---
 

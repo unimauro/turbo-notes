@@ -161,7 +161,7 @@ flowchart TD
     CI --> G{"All green?"}
     G -->|yes| M["Merge to main"]
     G -->|no| F["Fix and push"] --> CI
-    M --> D["Deploy to VPS"] --> L(("Live"))
+    M --> D["Ship green main<br/>runner / manual"] --> L(("Live"))
       </div>
       <ul class="small">
         <li><strong>Gate</strong> — flake8 · black/isort · pytest <em>≥85% (now 100%)</em> · Jest · next build.</li>
@@ -180,10 +180,10 @@ flowchart TD
       <div class="card small">
         <strong style="color:var(--olive)">"Saneado" deploy</strong>
         <ul style="margin:.4em 0 0; padding-left:18px;">
-          <li>Isolated Compose project on <code>127.0.0.1:3300</code> — safe beside other live apps.</li>
-          <li>Idempotent Caddy wiring · <strong>validate before reload</strong> — a bad edit never takes a site down.</li>
-          <li>Post-deploy <code>/api/health</code> check.</li>
-          <li>Secrets only in GitHub Actions, never in the repo.</li>
+          <li><strong>Prod is never touched by a PR</strong> — only reviewed, green <code>main</code> ships.</li>
+          <li>Isolated Compose on <code>127.0.0.1:3300</code> · idempotent Caddy with <strong>validate before reload</strong>.</li>
+          <li>Post-deploy <code>/api/health</code> check · secrets only on the box's <code>.env</code>.</li>
+          <li>VPS firewalls inbound SSH → ships via <strong>manual tar+ssh / self-hosted runner</strong> (honest, not auto).</li>
         </ul>
       </div>
       <div class="card small">
