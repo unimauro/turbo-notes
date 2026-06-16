@@ -9,7 +9,7 @@ export default function EmptyState() {
       role="status"
       className="flex flex-col items-center justify-center px-6 py-24 text-center"
     >
-      <KawaiiBoba className="h-36 w-28" />
+      <KawaiiBoba className="h-32 w-32" />
       <p className="mt-6 max-w-xs text-sm text-ink dark:text-linen">
         I&apos;m just here waiting for your charming notes...
       </p>

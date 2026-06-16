@@ -186,7 +186,7 @@ The UI is built to match the official prototype video (auth screens, category si
 - **Search** — no search box appears in the prototype, so the UI doesn't render one. The `?search=` API support and the typed service-layer call (`listNotes({ search })`) remain, tested, for future use.
 - **Dark mode** — not in the prototype; kept as a bonus (it predates the redesign), adapted to a warm dark-brown background with the pastel cards slightly muted.
 - **Category colors** — the API stores only a slug (`coral|yellow|teal|lavender`); the hex palette lives in `frontend/src/lib/colors.ts`, so design retuning never needs a migration.
-- **Illustrations** — the cactus, sleeping cat, and boba cup are original inline SVGs (`frontend/src/components/Kawaii.tsx`), not copied assets.
+- **Illustrations** — the cactus, sleeping cat, and boba cup are the official Figma assets (transparent PNGs in `frontend/public/`, wrapped by `frontend/src/components/Kawaii.tsx`).
 
 ## Tradeoffs
 
