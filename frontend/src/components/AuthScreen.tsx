@@ -99,7 +99,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         className="flex w-full max-w-xs flex-col items-stretch gap-4"
         aria-label={copy.heading}
       >
-        <Illustration className="mx-auto h-24 w-24 sm:h-28 sm:w-28" />
+        <Illustration className="mx-auto h-28 w-36 sm:h-32 sm:w-40" />
 
         <h1 className="mb-4 text-center font-serif text-4xl font-bold text-ink dark:text-linen">
           {copy.heading}
