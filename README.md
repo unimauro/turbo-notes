@@ -396,7 +396,7 @@ The rest of this section is the honest division of labor.
 
 **What AI accelerated:** scaffolding (Django/Next layout, Dockerfiles, CI), the prototype-matching redesign (palette tokens, the original kawaii SVGs, the autosave editor), test generation against case lists I specified (the 401 matrix, per-user scoping, autosave debounce with fake timers, optimistic-rollback paths), and documentation drafts.
 
-**What the tests caught — concrete, verifiable examples:** the email-login serializer initially rebound simplejwt's popped username field, which silently kept `source="username"` and broke credential routing — the auth test suite (`backend/apps/users/tests/test_auth.py`) caught it, and the fix (a fresh `EmailField`) is commented in `apps/users/serializers.py`. Earlier, pip resolved Django 6.0 against the challenge's Django 5 requirement — hence the explicit `Django==5.2.x` pin you can see in `requirements.txt`. And Next.js 16's stricter react-hooks/compiler lint rules shaped real patterns in the code: token hydration via `useSyncExternalStore` (`src/lib/auth-context.tsx`) instead of effect-setState, and an autosave loop guard instead of recursive flushing (`src/components/NoteEditor.tsx`).
+**What the tests caught — concrete, verifiable examples:** the email-login serializer initially rebound simplejwt's popped username field, which silently kept `source="username"` and broke credential routing — the auth test suite (`backend/apps/users/tests/test_auth.py`) caught it, and the fix (a fresh `EmailField`) is commented in `apps/users/serializers.py`. Earlier, pip resolved Django 6.0 against the challenge's Django 5 requirement — hence the explicit `Django==5.2.x` pin you can see in `requirements.txt`. That pin is a **deliberate hold on the 5.2 LTS line** (security support to 2028) over the non-LTS 6.0 — Dependabot's Django 6.0 PR is intentionally left unmerged: stability over chasing the latest major. And Next.js 16's stricter react-hooks/compiler lint rules shaped real patterns in the code: token hydration via `useSyncExternalStore` (`src/lib/auth-context.tsx`) instead of effect-setState, and an autosave loop guard instead of recursive flushing (`src/components/NoteEditor.tsx`).
 
 **Workflow:** I worked from a written brief plus a frame-by-frame design spec of the prototype video as the single source of truth, ran specialized agent sessions for backend and frontend with explicit quality gates (tests green, lint clean, build passing — verified by actually running them, not by assertion), and reviewed the output against the spec before integration. Where the two halves had to agree — the auth contract, the category slug palette, the pagination envelope, CORS, the build-time inlining of `NEXT_PUBLIC_API_URL` — I verified the contract on both sides myself, including an end-to-end curl smoke test of register → token → create → filter.
 
@@ -407,8 +407,11 @@ The rest of this section is the honest division of labor.
 See **[SECURITY.md](SECURITY.md)** for the full **OWASP Top 10 (2021)** posture. Highlights:
 owner-scoped access control (404 over 403), HTTPS + HSTS + secure cookies in prod, ORM-only
 queries with allow-listed filters, **rate limiting** on auth (10/min) and the paid AI
-endpoints (20/min), validated upload/text limits, and no committed secrets. Known gaps are
-named honestly (structured security logging; a transitive build-time `npm audit` advisory).
+endpoints (20/min), CSRF-protected admin, validated upload/text limits, and no committed
+secrets. **CodeQL + Dependabot** run continuously, and the initial findings were
+remediated — CSRF on the admin, no exception-text exposure from the AI endpoints, and the
+transitive `npm audit` advisories pinned forward (**0 vulnerabilities**). See the
+*Static analysis & remediation* table in SECURITY.md.
 
 ## Scalability considerations
 
