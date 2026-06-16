@@ -6,7 +6,7 @@ The guiding principle throughout: **the right amount of engineering for the scop
 
 > **🔴 Live demo:** **[notes.cardenas.pe](https://notes.cardenas.pe)** — sign up, or log in with `demo@turbo.ai` / `demo12345` (backup: `demo2@turbo.ai` / `demo12345`). Each demo account is preloaded with sample notes.
 >
-> **AI:** the editor dictates by voice — **OpenAI Whisper** when a key is configured (it is, on the live demo), falling back to free in-browser dictation otherwise.
+> **AI (live):** dictate notes by voice (**OpenAI Whisper**), read them aloud (**TTS**), **suggest a title** / **summarize** with one click, and finish hands-free by saying **"Turbo close."** Everything degrades gracefully to free in-browser speech when no key is set.
 
 ## Features
 
@@ -15,6 +15,8 @@ The guiding principle throughout: **the right amount of engineering for the scop
 - **Categories** — four seeded categories (Random Thoughts · School · Personal · Drama), each note belongs to one; sidebar shows per-user note counts and filters the board (`?category=<id>` on the API).
 - **Autosave editor** — fullscreen takeover with **no save button**, matching the prototype: the note is created on the first keystroke, then PATCHed with an 800 ms debounce; pending changes flush on close (X). Changing category instantly recolors the card. Blank titles are allowed end-to-end (drafts exist before titles do).
 - **Voice, both ways (AI)** — *dictate* a note by mic (**OpenAI Whisper** when a key is set, else free in-browser Web Speech) and *read it aloud* (**OpenAI TTS**, a soft natural voice, else the browser's). Each path degrades gracefully when no key is configured — see [AI transcription](#ai-transcription-whisper).
+- **AI assist** — one click to **suggest a title** or **summarize** a note (OpenAI `gpt-4o-mini`), applied autosave-safely (the summary is non-destructive — shown in a dismissible card with an "Insert" action). Hidden when no key is configured.
+- **"Turbo close" — hands-free voice command** — finish a voice note without touching the keyboard: while dictating, say **"Turbo close"** and the app strips the command from the text, auto-titles the note with AI (if the title is empty), **materializes** the new title, then **evaporates** the editor closed. A small tooltip hints it while recording; the X and Escape still work.
 - **Security** — rate limiting on auth (10/min) and the paid AI endpoints (20/min), HTTPS + HSTS + secure cookies in prod, owner-scoped access (404 not 403), ORM-only queries with allow-listed filters. Full **[OWASP Top 10](SECURITY.md)** write-up.
 - **Admin & observability** — a Django admin back-office (`/admin/`) over users and notes, plus an **auth audit log** (login/register events with IP) and **OpenAI usage tracking** (every transcribe/speak call) — closing the security-logging gap.
 - Notes CRUD — list, create, edit, delete (hover trash icon + confirmation)
@@ -280,21 +282,21 @@ Because the endpoint is **OpenAI-compatible**, it works unchanged with OpenAI or
 
 ## Testing
 
-Backend — **141 tests, 100% coverage** on `apps/` (target was ≥85%):
+Backend — **156 tests, 100% coverage** on `apps/` (target was ≥85%):
 
 ```bash
 cd backend && source .venv/bin/activate
-pytest --cov=apps --cov-report=term    # 141 passed
+pytest --cov=apps --cov-report=term    # 156 passed
 flake8 && black --check . && isort --check-only .
 ```
 
 Coverage spans models (category seed order, PROTECT on category, CASCADE on owner, blank titles), serializers (default category, `category_id` writes, unknown category → 400, output shape), the full API surface — a 401 matrix for every unauthenticated endpoint, per-user scoping (reading/patching/deleting another user's note → 404), category filtering including non-numeric params, per-user category counts, plus all the original CRUD/pagination/search/ordering tests now auth-aware — and auth itself: register shape, email lowercasing, case-insensitive duplicates, weak-password rejection, token obtain/refresh, wrong credentials, and an end-to-end Bearer round trip.
 
-Frontend — **72 tests, 13 suites**:
+Frontend — **87 tests, 16 suites**:
 
 ```bash
 cd frontend
-npm test          # 72 passed
+npm test          # 87 passed
 npm run lint      # 0 problems
 npm run build     # must pass (CI enforces it)
 ```
@@ -334,7 +336,7 @@ The challenge encourages AI tooling, so here is exactly what I used and how — 
 |---|---|
 | **An agentic LLM coding assistant** (my AI pair-programmer) | The main coworker on this build: scaffolding, feature implementation, test generation, and documentation drafts — run as focused agent sessions, including **parallel backend and frontend agents** working against a shared written contract while I reviewed and integrated. |
 | **yt-dlp + ffmpeg** (driven by the assistant) | Downloaded the prototype walkthrough video and extracted it frame-by-frame, then turned those frames into a written design spec — the source of truth for behavior (auth, autosave, categories) before the Figma existed. |
-| **OpenAI** (Whisper + TTS) | Shipped as *product* features, not dev tools: AI voice-to-text (Whisper) and read-aloud (TTS) in the editor, each behind a graceful fallback to free in-browser speech. |
+| **OpenAI** (Whisper · TTS · `gpt-4o-mini`) | Shipped as *product* features, not dev tools: AI voice-to-text (Whisper), read-aloud (TTS), and assist — suggest-title / summarize, plus the "Turbo close" hands-free flow. Each is throttled, key-gated, and degrades to free in-browser speech when unconfigured. |
 | Standard model tooling | OpenAPI/Swagger generation (drf-spectacular), linters and formatters (flake8/black/isort, ESLint/Prettier) as automated quality gates. |
 
 The rest of this section is the honest division of labor.
@@ -347,7 +349,7 @@ The rest of this section is the honest division of labor.
 
 **Workflow:** I worked from a written brief plus a frame-by-frame design spec of the prototype video as the single source of truth, ran specialized agent sessions for backend and frontend with explicit quality gates (tests green, lint clean, build passing — verified by actually running them, not by assertion), and reviewed the output against the spec before integration. Where the two halves had to agree — the auth contract, the category slug palette, the pagination envelope, CORS, the build-time inlining of `NEXT_PUBLIC_API_URL` — I verified the contract on both sides myself, including an end-to-end curl smoke test of register → token → create → filter.
 
-**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 141 + 72 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
+**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 156 + 87 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
 
 ## Security
 
