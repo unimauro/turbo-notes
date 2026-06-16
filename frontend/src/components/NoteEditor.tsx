@@ -187,6 +187,13 @@ export default function NoteEditor({
   // turboClose) reach the latest sequence fn without re-subscribing handlers.
   const turboClosingRef = useRef(false);
   const turboCloseRef = useRef<(() => void) | null>(null);
+  // Set by the real-time command listener (useWhisperRecorder.onCommand) the
+  // instant the finish phrase is heard. It stops the Whisper recorder, whose
+  // transcript then flows through appendDictation as usual — but Whisper may
+  // transcribe the spoken command differently, so this flag forces the close
+  // sequence after that transcript is appended regardless of whether the regex
+  // matched the Whisper text. Cleared whenever the close actually fires.
+  const pendingFinishRef = useRef(false);
 
   const closingRef = useRef(false);
   async function handleClose() {
@@ -406,8 +413,16 @@ export default function NoteEditor({
       // A working append means any prior transcribe error is stale; clear it.
       setTranscribeError(null);
 
-      if (triggered && !turboClosingRef.current) {
+      // Fire the close sequence when EITHER the transcript itself contained the
+      // command, OR the real-time listener already heard it (pendingFinishRef)
+      // and stopped recording — in which case Whisper's text may not contain
+      // the exact words, so we close regardless. Guard so it fires only once.
+      if (
+        (triggered || pendingFinishRef.current) &&
+        !turboClosingRef.current
+      ) {
         turboClosingRef.current = true;
+        pendingFinishRef.current = false;
         turboCloseRef.current?.();
       }
     },
@@ -441,10 +456,41 @@ export default function NoteEditor({
     [dictationSupported, dictationStart],
   );
 
+  // Lets the real-time command handler stop the recorder without referencing
+  // `whisper.stop` before `whisper` is declared. Written in an effect below.
+  const whisperStopRef = useRef<(() => void) | null>(null);
+
+  // Real-time hands-free finish: fired by the parallel SpeechRecognition the
+  // instant the command is heard (see useWhisperRecorder). We stop the Whisper
+  // recorder — its normal pipeline (upload -> transcript -> appendDictation)
+  // then strips the command words and runs the close — and set pendingFinishRef
+  // so the close fires even if Whisper's transcript doesn't contain the exact
+  // words. A short safety-net timer guarantees the close even if Whisper yields
+  // no transcript at all (empty clip / transcription failure).
+  const handleWhisperCommand = useCallback(() => {
+    if (turboClosingRef.current || pendingFinishRef.current) return;
+    pendingFinishRef.current = true;
+    whisperStopRef.current?.();
+    setTimeout(() => {
+      if (pendingFinishRef.current && !turboClosingRef.current) {
+        turboClosingRef.current = true;
+        pendingFinishRef.current = false;
+        turboCloseRef.current?.();
+      }
+    }, 4000);
+  }, []);
+
   const whisper = useWhisperRecorder({
     onTranscript: appendDictation,
     onError: handleWhisperError,
+    onCommand: handleWhisperCommand,
   });
+
+  // Expose whisper.stop to handleWhisperCommand (declared before `whisper`).
+  const whisperStopFn = whisper.stop;
+  useEffect(() => {
+    whisperStopRef.current = whisperStopFn;
+  }, [whisperStopFn]);
 
   // Resolve availability once on open; default to Web Speech if the check fails
   // or if the browser can't record (MediaRecorder unsupported).

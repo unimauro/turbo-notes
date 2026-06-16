@@ -1,22 +1,36 @@
 /**
- * Hands-free voice command: "close my note".
+ * Hands-free voice command: "close my note" / "save my note".
  *
- * Spoken into the dictation/Whisper transcript, "close my note" tells the editor
- * to finish the note and gracefully close itself. The legacy "turbo close" phrase
- * stays supported as an alias. Speech recognition tends to insert punctuation/
- * casing variants ("Close my Note.", "Turbo, close", "turbo closed."), so the
- * matcher is deliberately lenient and case-insensitive.
+ * Spoken into the dictation/Whisper transcript, "close my note" (or "save my
+ * note") tells the editor to finish the note and gracefully close itself. The
+ * legacy "turbo close" phrase stays supported as an alias. Speech recognition
+ * tends to insert punctuation/casing variants ("Close my Note.", "Save my
+ * notes", "Turbo, close", "turbo closed."), so the matcher is deliberately
+ * lenient and case-insensitive.
  */
 
 /**
- * Matches the primary command "close my note"/"close my notes" AND the legacy
- * alias "turbo close" (and recognizer variants like "Close my Note.",
- * "Turbo, close", "Turboclose" or "turbo closed"): either "clos" + any word
- * chars, then "my", then "note(s)"; or the word "turbo", optional whitespace/
- * punctuation, then "clos" followed by any word chars.
+ * Matches the primary commands "close my note(s)" / "save my note(s)" AND the
+ * legacy alias "turbo close" (plus recognizer variants like "Close my Note.",
+ * "Save my notes", "Turbo, close", "Turboclose" or "turbo closed"): either
+ * "clos"/"sav" + any word chars, then "my", then "note(s)"; or the word
+ * "turbo", optional whitespace/punctuation, then "clos" followed by any word
+ * chars.
  */
 export const TURBO_CLOSE_RE =
-  /\b(?:clos\w*\s+my\s+notes?|turbo[\s,.]*clos\w*)\b/i;
+  /\b(?:(?:clos|sav)\w*\s+my\s+notes?|turbo[\s,.]*clos\w*)\b/i;
+
+/**
+ * Pure predicate used by the real-time command listener (and easily unit
+ * tested): does this rolling transcript contain the finish command?
+ *
+ * The browser `SpeechRecognition` listener accumulates interim + final results
+ * into a single rolling string and calls this on every result; it's just a thin
+ * wrapper over {@link TURBO_CLOSE_RE} so the matching logic has one home.
+ */
+export function matchesTurboClose(transcript: string): boolean {
+  return TURBO_CLOSE_RE.test(transcript);
+}
 
 export interface StripTurboCloseResult {
   /** The transcript with the command phrase removed and whitespace tidied. */
