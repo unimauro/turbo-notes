@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
-  useQuery,
   useQueryClient,
+  type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
 
@@ -24,29 +24,60 @@ export const notesKeys = {
 };
 
 type NotesPage = Paginated<Note>;
-type Snapshot = [readonly unknown[], NotesPage | undefined][];
+type NotesInfinite = InfiniteData<NotesPage, number>;
+type Snapshot = [readonly unknown[], NotesInfinite | undefined][];
 
-/** Paginated, filterable notes list. Previous page is kept while fetching. */
+/**
+ * Derives the next DRF page number from a `Paginated.next` URL.
+ * Returns `undefined` when there is no further page (DRF sends `next: null`).
+ *
+ * Exported for unit testing the pagination contract directly.
+ */
+export function getNextPageParam(lastPage: NotesPage): number | undefined {
+  if (!lastPage.next) return undefined;
+  // DRF emits absolute or relative URLs like ".../notes/?page=3"; the first page
+  // omits `?page=` entirely, so a missing param means page 2.
+  const match = /[?&]page=(\d+)/.exec(lastPage.next);
+  return match ? Number(match[1]) : 2;
+}
+
+/**
+ * Infinite, filterable notes list. Pages are fetched on demand as the board's
+ * sentinel scrolls into view; the cache is shaped as
+ * `{ pages: Paginated<Note>[], pageParams: number[] }`.
+ */
 export function useNotes(params: ListNotesParams) {
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: notesKeys.list(params),
-    queryFn: () => listNotes(params),
-    placeholderData: keepPreviousData,
+    queryFn: ({ pageParam }) => listNotes({ ...params, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam,
   });
+
+  return {
+    ...query,
+    /** All loaded notes, flattened across pages. */
+    notes: query.data?.pages.flatMap((page) => page.results) ?? [],
+    /** Total server-side count (from the first loaded page). */
+    count: query.data?.pages[0]?.count ?? 0,
+  };
 }
 
 /* ------------------------------------------------------------------------ *
  * Optimistic mutations
  *
  * All three mutations follow the same recipe:
- *   onMutate  — cancel in-flight list queries, snapshot every cached page,
- *               write the optimistic result into the cache
+ *   onMutate  — cancel in-flight list queries, snapshot every cached infinite
+ *               query, write the optimistic result into the cache
  *   onError   — restore the snapshot (full rollback)
  *   onSettled — invalidate (notes + category counts) so server state wins
+ *
+ * The cache value is now `InfiniteData<Paginated<Note>>`, so edits map across
+ * `data.pages[*].results` instead of a single `{count, results}` object.
  * ------------------------------------------------------------------------ */
 
 function snapshotLists(qc: QueryClient): Snapshot {
-  return qc.getQueriesData<NotesPage>({ queryKey: notesKeys.all });
+  return qc.getQueriesData<NotesInfinite>({ queryKey: notesKeys.all });
 }
 
 function restoreLists(qc: QueryClient, snapshot: Snapshot | undefined): void {
@@ -90,11 +121,29 @@ export function useCreateNote(activeParams: ListNotesParams) {
         updated_at: now,
       };
 
-      qc.setQueryData<NotesPage>(notesKeys.list(activeParams), (old) =>
-        old
-          ? { ...old, count: old.count + 1, results: [optimistic, ...old.results] }
-          : { count: 1, next: null, previous: null, results: [optimistic] },
-      );
+      qc.setQueryData<NotesInfinite>(notesKeys.list(activeParams), (old) => {
+        if (!old || old.pages.length === 0) {
+          // No page loaded yet — seed a single first page with the optimistic note.
+          return {
+            pages: [
+              { count: 1, next: null, previous: null, results: [optimistic] },
+            ],
+            pageParams: [1],
+          };
+        }
+        const [first, ...rest] = old.pages;
+        return {
+          ...old,
+          pages: [
+            {
+              ...first,
+              count: first.count + 1,
+              results: [optimistic, ...first.results],
+            },
+            ...rest,
+          ],
+        };
+      });
 
       return { snapshot };
     },
@@ -113,21 +162,26 @@ export function useUpdateNote() {
       const snapshot = snapshotLists(qc);
 
       const updatedAt = new Date().toISOString();
-      snapshot.forEach(([key, page]) => {
-        if (!page) return;
-        qc.setQueryData<NotesPage>(key, {
-          ...page,
-          results: page.results.map((note) =>
-            note.id === id
-              ? {
-                  ...note,
-                  ...("title" in input ? { title: input.title ?? "" } : {}),
-                  ...("content" in input ? { content: input.content ?? "" } : {}),
-                  ...(category ? { category } : {}),
-                  updated_at: updatedAt,
-                }
-              : note,
-          ),
+      snapshot.forEach(([key, data]) => {
+        if (!data) return;
+        qc.setQueryData<NotesInfinite>(key, {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            results: page.results.map((note) =>
+              note.id === id
+                ? {
+                    ...note,
+                    ...("title" in input ? { title: input.title ?? "" } : {}),
+                    ...("content" in input
+                      ? { content: input.content ?? "" }
+                      : {}),
+                    ...(category ? { category } : {}),
+                    updated_at: updatedAt,
+                  }
+                : note,
+            ),
+          })),
         });
       });
 
@@ -147,15 +201,21 @@ export function useDeleteNote() {
       await qc.cancelQueries({ queryKey: notesKeys.all });
       const snapshot = snapshotLists(qc);
 
-      snapshot.forEach(([key, page]) => {
-        if (!page) return;
-        const results = page.results.filter((note) => note.id !== id);
-        if (results.length === page.results.length) return;
-        qc.setQueryData<NotesPage>(key, {
-          ...page,
-          count: Math.max(0, page.count - 1),
-          results,
+      snapshot.forEach(([key, data]) => {
+        if (!data) return;
+        let removed = false;
+        const pages = data.pages.map((page) => {
+          const results = page.results.filter((note) => note.id !== id);
+          if (results.length === page.results.length) return page;
+          removed = true;
+          return {
+            ...page,
+            count: Math.max(0, page.count - 1),
+            results,
+          };
         });
+        if (!removed) return;
+        qc.setQueryData<NotesInfinite>(key, { ...data, pages });
       });
 
       return { snapshot };

@@ -1,9 +1,17 @@
 /**
  * Optimistic-mutation tests: the service layer is mocked; we drive the hooks
- * through a real QueryClient and assert the cache is updated optimistically
- * and fully rolled back when the server rejects.
+ * through a real QueryClient and assert the infinite cache is updated
+ * optimistically and fully rolled back when the server rejects.
+ *
+ * The list cache is now `InfiniteData<Paginated<Note>>`, i.e.
+ * `{ pages: Paginated<Note>[], pageParams: number[] }`, so assertions read
+ * through `data.pages[*].results`.
  */
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -15,6 +23,7 @@ jest.mock("@/services/notes", () => ({
 }));
 
 import {
+  getNextPageParam,
   notesKeys,
   useCreateNote,
   useDeleteNote,
@@ -42,6 +51,8 @@ const existing: Note = {
 const params = {};
 const listKey = notesKeys.list(params);
 
+type NotesInfinite = InfiniteData<Paginated<Note>, number>;
+
 function seededClient(): QueryClient {
   const qc = new QueryClient({
     defaultOptions: {
@@ -49,13 +60,11 @@ function seededClient(): QueryClient {
       mutations: { retry: false },
     },
   });
-  const page: Paginated<Note> = {
-    count: 1,
-    next: null,
-    previous: null,
-    results: [existing],
+  const data: NotesInfinite = {
+    pages: [{ count: 1, next: null, previous: null, results: [existing] }],
+    pageParams: [1],
   };
-  qc.setQueryData(listKey, page);
+  qc.setQueryData(listKey, data);
   return qc;
 }
 
@@ -65,12 +74,49 @@ function wrapperFor(qc: QueryClient) {
   };
 }
 
+/** Flattened notes across all cached pages (mirrors the hook's `notes`). */
 function cachedResults(qc: QueryClient): Note[] {
-  return qc.getQueryData<Paginated<Note>>(listKey)?.results ?? [];
+  const data = qc.getQueryData<NotesInfinite>(listKey);
+  return data?.pages.flatMap((page) => page.results) ?? [];
+}
+
+/** Total count from the first cached page. */
+function cachedCount(qc: QueryClient): number | undefined {
+  return qc.getQueryData<NotesInfinite>(listKey)?.pages[0]?.count;
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+describe("getNextPageParam", () => {
+  it("returns undefined when DRF reports no next page", () => {
+    expect(
+      getNextPageParam({ count: 1, next: null, previous: null, results: [] }),
+    ).toBeUndefined();
+  });
+
+  it("parses the page number out of the DRF next URL", () => {
+    expect(
+      getNextPageParam({
+        count: 50,
+        next: "https://api.example.com/notes/?page=3",
+        previous: null,
+        results: [],
+      }),
+    ).toBe(3);
+  });
+
+  it("defaults to page 2 when next has no explicit page param", () => {
+    expect(
+      getNextPageParam({
+        count: 50,
+        next: "https://api.example.com/notes/",
+        previous: null,
+        results: [],
+      }),
+    ).toBe(2);
+  });
 });
 
 describe("useCreateNote", () => {
@@ -99,7 +145,7 @@ describe("useCreateNote", () => {
       });
       expect(results[0].id).toBeLessThan(0); // optimistic marker
     });
-    expect(qc.getQueryData<Paginated<Note>>(listKey)?.count).toBe(2);
+    expect(cachedCount(qc)).toBe(2);
   });
 
   it("rolls the cache back when the create fails", async () => {
@@ -113,7 +159,7 @@ describe("useCreateNote", () => {
     await expect(result.current.mutateAsync(vars)).rejects.toThrow("500");
 
     expect(cachedResults(qc)).toEqual([existing]);
-    expect(qc.getQueryData<Paginated<Note>>(listKey)?.count).toBe(1);
+    expect(cachedCount(qc)).toBe(1);
   });
 });
 
@@ -170,7 +216,7 @@ describe("useDeleteNote", () => {
     await waitFor(() => {
       expect(cachedResults(qc)).toHaveLength(0);
     });
-    expect(qc.getQueryData<Paginated<Note>>(listKey)?.count).toBe(0);
+    expect(cachedCount(qc)).toBe(0);
   });
 
   it("restores the note when the delete fails", async () => {
@@ -184,6 +230,6 @@ describe("useDeleteNote", () => {
     await expect(result.current.mutateAsync(7)).rejects.toThrow("denied");
 
     expect(cachedResults(qc)).toEqual([existing]);
-    expect(qc.getQueryData<Paginated<Note>>(listKey)?.count).toBe(1);
+    expect(cachedCount(qc)).toBe(1);
   });
 });

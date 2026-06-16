@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import CategorySidebar from "@/components/CategorySidebar";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -19,9 +19,6 @@ import type { Note } from "@/types/note";
 
 /** null = editor closed · "new" = creating · Note = editing that note. */
 type EditorTarget = null | "new" | Note;
-
-const pagerButtonClass =
-  "inline-flex h-9 items-center gap-1 rounded-full border border-ink-line bg-paper px-4 text-sm font-semibold text-ink transition-colors hover:bg-[#EFE3C8] disabled:cursor-not-allowed disabled:opacity-40 dark:border-linen-soft/60 dark:bg-bark-soft dark:text-linen dark:hover:bg-[#46382a]";
 
 export default function Home() {
   const { ready, isAuthenticated } = useAuth();
@@ -41,30 +38,49 @@ function Board() {
   const { logout } = useAuth();
 
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
   const [editorTarget, setEditorTarget] = useState<EditorTarget>(null);
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
 
-  const params = {
-    ...(categoryId !== null ? { category: categoryId } : {}),
-    page,
-  };
-  const { data, isPending, isError, refetch } = useNotes(params);
+  const params = categoryId !== null ? { category: categoryId } : {};
+  const {
+    notes,
+    isPending,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useNotes(params);
   const { data: categories = [] } = useCategories();
   const deleteNote = useDeleteNote();
 
+  // Sentinel below the list: when it scrolls into view and there's another page
+  // (and we're not already fetching one), pull the next page automatically.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   function handleSelectCategory(id: number | null) {
+    // Changing the category swaps the queryKey, so the list refetches from
+    // page 1 on its own — no manual reset needed with infinite scroll.
     setCategoryId(id);
-    setPage(1);
   }
 
   function handleConfirmDelete() {
     if (deleteTarget) {
       deleteNote.mutate(deleteTarget.id);
-      // Deleting the last note of a page would leave it empty — step back.
-      if (data && data.results.length === 1 && page > 1) {
-        setPage((p) => p - 1);
-      }
     }
     setDeleteTarget(null);
   }
@@ -74,7 +90,6 @@ function Board() {
     router.replace("/login");
   }
 
-  const notes = data?.results ?? [];
   const showEmpty = !isPending && !isError && notes.length === 0;
 
   return (
@@ -132,33 +147,18 @@ function Board() {
                 onDelete={(note) => setDeleteTarget(note)}
               />
 
-              {(data?.next || data?.previous) && (
-                <nav
-                  aria-label="Pagination"
-                  className="mt-8 flex items-center justify-center gap-4"
+              {/* Sentinel: scrolling it into view loads the next page. */}
+              <div ref={sentinelRef} aria-hidden="true" className="h-px" />
+
+              {isFetchingNextPage && (
+                <div
+                  role="status"
+                  aria-label="Loading more notes"
+                  className="mt-8 flex items-center justify-center gap-2 text-sm text-ink-soft dark:text-linen-soft"
                 >
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={!data?.previous}
-                    className={pagerButtonClass}
-                  >
-                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                    Previous
-                  </button>
-                  <span className="text-sm tabular-nums text-ink-soft dark:text-linen-soft">
-                    Page {page} · {data?.count ?? 0} notes
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={!data?.next}
-                    className={pagerButtonClass}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </nav>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Loading more…
+                </div>
               )}
             </>
           )}
