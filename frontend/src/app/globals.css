@@ -146,6 +146,113 @@ html.dark {
   animation: editor-evaporate 0.5s ease-in forwards;
 }
 
+/* "Card being created" close transition (both the voice and X paths). A
+   centered forming-card overlay assembles itself over a soft scrim, the AI
+   title materializes (reusing title-materialize via .turbo-materialize), it
+   holds a beat, then settles into the board as onClose() runs.
+   - forming-scrim-in / -out: the backdrop fades in, then out on settle.
+   - forming-card-in: the card scales up from ~0.9 with a gentle overshoot.
+   - forming-card-settle: it shrinks + lifts + fades as it "drops into" the
+     board, reading as the hand-off to the real Latest card.
+   - forming-shimmer: the placeholder body lines breathe like they're filling
+     in (the "assembling" feel).
+   - board-pop: a one-shot settle-in the Latest board card plays on first
+     appearance so the overlay card → real card hand-off reads as continuous. */
+@keyframes forming-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes forming-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes forming-card-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(6px);
+    filter: blur(4px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.02) translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes forming-card-settle {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.86) translateY(14px);
+  }
+}
+
+@keyframes forming-shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes board-pop {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.94);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.forming-scrim-in {
+  animation: forming-scrim-in 0.28s ease-out both;
+}
+
+.forming-scrim-out {
+  animation: forming-scrim-out 0.3s ease-in forwards;
+}
+
+.forming-card-in {
+  animation: forming-card-in 0.42s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.forming-card-settle {
+  animation: forming-card-settle 0.32s ease-in forwards;
+}
+
+.forming-shimmer {
+  animation: forming-shimmer 1.4s ease-in-out infinite;
+}
+
+.board-pop {
+  animation: board-pop 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
 /* Loading transitions for the board:
    - fade-in: skeleton grid gently appears (opacity only).
    - fade-in-up: real notes fade + slide up subtly on first render so the
@@ -183,6 +290,8 @@ html.dark {
   .dictation-dot,
   .editor-enter,
   .turbo-materialize,
+  .forming-shimmer,
+  .board-pop,
   .fade-in,
   .fade-in-up {
     animation: none;
@@ -193,5 +302,20 @@ html.dark {
   .turbo-evaporate {
     animation: none;
     opacity: 0;
+  }
+
+  /* Forming-card transition degrades to a simple fade — no scale/blur — but the
+     card, the "Creating your card…" line and the title still show. */
+  .forming-scrim-in {
+    animation: forming-scrim-in 0.2s linear both;
+  }
+  .forming-scrim-out {
+    animation: forming-scrim-out 0.2s linear forwards;
+  }
+  .forming-card-in {
+    animation: forming-scrim-in 0.2s linear both;
+  }
+  .forming-card-settle {
+    animation: forming-scrim-out 0.2s linear forwards;
   }
 }

@@ -34,15 +34,45 @@ jest.mock("@/services/assist", () => ({
   assist: jest.fn(),
 }));
 
+// Mock the Whisper recorder so tests can drive its callbacks (onCommand /
+// onTranscript) directly and reproduce the "transcript arrives after the close
+// is triggered" ordering that the race fix targets. The captured options let a
+// test fire the hands-free command and then deliver the (delayed) transcript.
+let whisperOptions: {
+  onTranscript: (text: string) => void;
+  onError?: (m: string) => void;
+  onCommand?: () => void;
+} | null = null;
+const whisperStopMock = jest.fn();
+jest.mock("@/hooks/useWhisperRecorder", () => ({
+  useWhisperRecorder: (opts: {
+    onTranscript: (text: string) => void;
+    onError?: (m: string) => void;
+    onCommand?: () => void;
+  }) => {
+    whisperOptions = opts;
+    return {
+      supported: true,
+      listening: true,
+      transcribing: false,
+      error: null,
+      start: jest.fn(),
+      stop: whisperStopMock,
+    };
+  },
+}));
+
 import NoteEditor, { AUTOSAVE_DELAY_MS } from "@/components/NoteEditor";
 import { assist, getAssistEnabled } from "@/services/assist";
 import { createNote, updateNote } from "@/services/notes";
+import { getTranscriptionEnabled } from "@/services/transcription";
 import type { Category, Note } from "@/types/note";
 
 const createNoteMock = createNote as jest.Mock;
 const updateNoteMock = updateNote as jest.Mock;
 const getAssistEnabledMock = getAssistEnabled as jest.Mock;
 const assistMock = assist as jest.Mock;
+const getTranscriptionEnabledMock = getTranscriptionEnabled as jest.Mock;
 
 const categories: Category[] = [
   { id: 1, name: "Random Thoughts", color: "coral", note_count: 0 },
@@ -80,11 +110,29 @@ function renderEditor(note: Note | null, onClose = jest.fn()) {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useFakeTimers();
+  whisperOptions = null;
 });
 
 afterEach(() => {
   jest.useRealTimers();
 });
+
+/**
+ * Drains the close sequence: the flush promise chain plus the forming-card
+ * transition's sequential setTimeout beats (evaporate → optional AI naming →
+ * hold → settle). Each await in the sequence schedules its timer only after the
+ * previous microtask settles, so we interleave timer-advances with microtask
+ * flushes a few times to run the whole chain to onClose().
+ */
+async function settleClose() {
+  for (let i = 0; i < 8; i++) {
+    await act(async () => {
+      await Promise.resolve();
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+  }
+}
 
 describe("NoteEditor autosave", () => {
   it("creates the note once, debounced 800ms after the first change", async () => {
@@ -152,13 +200,9 @@ describe("NoteEditor autosave", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
     });
-    // Let the flush promise chain settle, run all timers (the exit-animation
-    // delay), and settle again so onClose() fires.
-    await act(async () => {
-      await Promise.resolve();
-      jest.runOnlyPendingTimers();
-      await Promise.resolve();
-    });
+    // Let the flush promise chain settle, then run the forming-card transition's
+    // timers through to onClose().
+    await settleClose();
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(updateNoteMock).toHaveBeenCalledTimes(1);
@@ -175,11 +219,7 @@ describe("NoteEditor autosave", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
     });
-    await act(async () => {
-      await Promise.resolve();
-      jest.runOnlyPendingTimers();
-      await Promise.resolve();
-    });
+    await settleClose();
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(createNoteMock).not.toHaveBeenCalled();
@@ -420,5 +460,142 @@ describe("NoteEditor autosave", () => {
     expect(screen.getByPlaceholderText("Pour your heart out...")).toHaveValue(
       "must not be lost",
     );
+  });
+});
+
+describe("NoteEditor hands-free close — transcript race fix", () => {
+  // Enable AI transcription (so the editor uses the mocked Whisper recorder) and
+  // AI assist (so an untitled note gets a generated title on close).
+  beforeEach(() => {
+    getTranscriptionEnabledMock.mockResolvedValue(true);
+    getAssistEnabledMock.mockResolvedValue(true);
+    createNoteMock.mockResolvedValue(savedNote);
+    updateNoteMock.mockResolvedValue(savedNote);
+  });
+
+  it("generates the title from a transcript that arrives AFTER the close is triggered", async () => {
+    // The bug: on a long note the 4s safety-net timer fired turboClose before
+    // the Whisper transcript was appended, so the title was generated from empty
+    // content (note saved "Untitled"). The fix makes turboClose await the
+    // pending transcript first. Here we reproduce the worst-case ordering:
+    // command heard → safety-net fires turboClose → THEN the transcript lands.
+    assistMock.mockResolvedValue("A Generated Title");
+    const onClose = jest.fn();
+    renderEditor(null, onClose);
+
+    // Let the availability probes (transcription + assist) resolve.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(whisperOptions).not.toBeNull();
+
+    // (1) The real-time listener hears "close my note" — arms pendingFinish,
+    // the pendingTranscript promise, and the 4s safety-net timer.
+    await act(async () => {
+      whisperOptions!.onCommand!();
+    });
+
+    // (2) The safety-net timer fires turboClose BEFORE the transcript appends.
+    // turboClose must now AWAIT the pending transcript rather than read empty
+    // content — so assist is NOT called yet.
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+      await Promise.resolve();
+    });
+    expect(assistMock).not.toHaveBeenCalled();
+
+    // (3) The delayed Whisper transcript finally lands. It appends the content
+    // and resolves the pending transcript, unblocking turboClose's title-gen.
+    await act(async () => {
+      whisperOptions!.onTranscript("this is a long dictated note body");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Drive the forming-card transition (and its title-gen beat) to completion.
+    await settleClose();
+
+    // The title was generated from the FINAL content (not empty)...
+    expect(assistMock).toHaveBeenCalledWith(
+      "this is a long dictated note body",
+      "title",
+    );
+
+    // ...and the generated title was persisted (in whichever save call landed it
+    // — create may fire first with the content, then a PATCH adds the title).
+    expect(onClose).toHaveBeenCalledTimes(1);
+    const allSaves = [
+      ...createNoteMock.mock.calls.map((c) => c[0]),
+      ...updateNoteMock.mock.calls.map((c) => c[1]),
+    ];
+    expect(allSaves).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "A Generated Title" }),
+      ]),
+    );
+    // The dictated content was saved too (never lost to the race).
+    expect(allSaves).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: "this is a long dictated note body",
+        }),
+      ]),
+    );
+  });
+
+  it("still closes cleanly when Whisper yields no transcript at all (genuine failure)", async () => {
+    // If the clip is empty / transcription fails, appendDictation never fires.
+    // The safety-net must still close — and with no content, skipping the title
+    // is correct (no stuck editor, no spurious assist call).
+    assistMock.mockResolvedValue("Should Not Be Used");
+    const onClose = jest.fn();
+    renderEditor(null, onClose);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      whisperOptions!.onCommand!();
+    });
+    // Safety-net fires; no transcript ever arrives.
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+      await Promise.resolve();
+    });
+    await settleClose();
+
+    // Closed cleanly; no title generated (no content to title).
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(assistMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("NoteEditor — 'card being created' close transition", () => {
+  it("shows the forming-card overlay on X close, then reveals the board", async () => {
+    updateNoteMock.mockResolvedValue(savedNote);
+    const onClose = renderEditor(savedNote);
+
+    fireEvent.change(screen.getByPlaceholderText("Pour your heart out..."), {
+      target: { value: "a thought worth keeping" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
+      // Let the flush settle so the forming-card overlay mounts.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The forming "card being created" overlay renders with the note's title.
+    const overlay = screen.getByRole("status", { name: /creating your card/i });
+    expect(overlay).toBeInTheDocument();
+    expect(overlay).toHaveTextContent(/Hi/);
+
+    // The transition resolves and the editor closes.
+    await settleClose();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
