@@ -1,12 +1,17 @@
 # Turbo Notes
 
+[![CI](https://github.com/unimauro/turbo-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/codeql.yml)
+[![Deploy to VPS](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml/badge.svg)](https://github.com/unimauro/turbo-notes/actions/workflows/deploy-vps.yml)
+[![AI review: CodeRabbit](https://img.shields.io/badge/AI%20review-CodeRabbit-ff570a)](https://coderabbit.ai)
+
 A production-quality notes application built for the Turbo AI Senior Full Stack Engineer challenge: Django 5 + DRF + PostgreSQL on the backend, Next.js (App Router) + TypeScript + TanStack Query on the frontend, JWT auth, per-user notes with color-coded categories, an autosaving editor — fully dockerized with CI, and styled to match the official prototype video (warm "cozy journal" design: cream paper, serif headings, pastel category cards, original kawaii illustrations).
 
 The guiding principle throughout: **the right amount of engineering for the scope** — clean layering, full test coverage, and documented tradeoffs, without inventing complexity the problem doesn't have.
 
 > **🔴 Live demo:** **[notes.cardenas.pe](https://notes.cardenas.pe)** — sign up, or log in with `demo@turbo.ai` / `demo12345` (backup: `demo2@turbo.ai` / `demo12345`). Each demo account is preloaded with sample notes.
 >
-> **AI (live):** dictate notes by voice (**OpenAI Whisper**), read them aloud (**TTS**), **suggest a title** / **summarize** with one click, and finish hands-free by saying **"Turbo close."** Everything degrades gracefully to free in-browser speech when no key is set.
+> **AI (live):** dictate notes by voice (**OpenAI Whisper**), read them aloud (**TTS**), **suggest a title** / **summarize** with one click, and finish hands-free by saying **"close my note."** Everything degrades gracefully to free in-browser speech when no key is set.
 
 ## Features
 
@@ -16,7 +21,7 @@ The guiding principle throughout: **the right amount of engineering for the scop
 - **Autosave editor** — fullscreen takeover with **no save button**, matching the prototype: the note is created on the first keystroke, then PATCHed with an 800 ms debounce; pending changes flush on close (X). Changing category instantly recolors the card. Blank titles are allowed end-to-end (drafts exist before titles do).
 - **Voice, both ways (AI)** — *dictate* a note by mic (**OpenAI Whisper** when a key is set, else free in-browser Web Speech) and *read it aloud* (**OpenAI TTS**, a soft natural voice, else the browser's). Each path degrades gracefully when no key is configured — see [AI transcription](#ai-transcription-whisper).
 - **AI assist** — one click to **suggest a title** or **summarize** a note (OpenAI `gpt-4o-mini`), applied autosave-safely (the summary is non-destructive — shown in a dismissible card with an "Insert" action). Hidden when no key is configured.
-- **"Turbo close" — hands-free voice command** — finish a voice note without touching the keyboard: while dictating, say **"Turbo close"** and the app strips the command from the text, auto-titles the note with AI (if the title is empty), **materializes** the new title, then **evaporates** the editor closed. A small tooltip hints it while recording; the X and Escape still work.
+- **"close my note" — hands-free voice command** — finish a voice note without touching the keyboard: while dictating, say **"close my note"** (or "save my note"; "turbo close" still works) and the app strips the command from the text, shows a **"Naming your note…"** beat while it auto-titles the note with AI (if the title is empty), **materializes** the new title, then **evaporates** the editor closed. A small tooltip hints it while recording; the X and Escape still work.
 - **Security** — rate limiting on auth (10/min) and the paid AI endpoints (20/min), HTTPS + HSTS + secure cookies in prod, owner-scoped access (404 not 403), ORM-only queries with allow-listed filters. Full **[OWASP Top 10](SECURITY.md)** write-up.
 - **Admin & observability** — a Django admin back-office (`/admin/`) over users and notes, plus an **auth audit log** (login/register events with IP) and **OpenAI usage tracking** (every transcribe/speak call) — closing the security-logging gap.
 - Notes CRUD — list, create, edit, delete (hover trash icon + confirmation)
@@ -126,6 +131,46 @@ flowchart LR
 **Why a service-less DRF ViewSet is still the right size.** Even with auth and categories, the backend remains thin, idiomatic DRF: ViewSet + serializers + models. Ownership stamping lives in `perform_create`, scoping in `get_queryset`, the default category in the serializer — each rule has exactly one obvious home, and none of them is a multi-step operation with side effects. A service layer here would still be a pass-through. The moment a real cross-cutting rule appears (e.g. "creating a note also indexes it and notifies collaborators"), the seam to introduce one (`perform_create`/`perform_update`) already exists.
 
 The same philosophy applies on the frontend: pages own state wiring, components are presentational, and all data access goes through three layers (`services/` for HTTP, `hooks/` for cache behavior, `types/` for contracts) so the API surface is mockable and components are testable in isolation.
+
+## CI/CD & quality gates
+
+Every change goes through a pull request; nothing reaches production unless the pipeline is green.
+
+```mermaid
+flowchart LR
+    PR["Pull request"] --> CI["CI · ci.yml"]
+    PR --> CR["CodeRabbit<br/>AI review"]
+    PR --> QL["CodeQL<br/>security scan"]
+    CI --> GATE{"All green?"}
+    GATE -->|yes| MERGE["Merge to main"]
+    GATE -->|no| FIX["Fix & push"] --> CI
+    MERGE --> DEP["Deploy to VPS<br/>deploy-vps.yml"]
+    DEP --> LIVE(("notes.cardenas.pe"))
+```
+
+**CI gate** (`.github/workflows/ci.yml`, runs on every push and PR to `main`):
+
+| Job | Steps |
+| --- | --- |
+| **Backend** | `flake8` lint · `black --check` + `isort --check` format · `pytest` with a **coverage floor of 85%** (currently 100%) |
+| **Frontend** | `npm run lint` · `npm test` (Jest + React Testing Library) · production `next build` |
+
+**Free quality layers** — three zero-cost services that add review and security without an API key on a public repo:
+
+- **CodeRabbit** (`.coderabbit.yaml`) — AI reviews every PR (summary + line-level suggestions, answers `@coderabbitai` questions). Advisory, never blocks merge on its own.
+- **CodeQL** (`.github/workflows/codeql.yml`) — GitHub's static analysis for TypeScript **and** Python; findings land under **Security → Code scanning**, plus a weekly scheduled scan.
+- **Dependabot** (`.github/dependabot.yml`) — weekly dependency + security-patch PRs for pip, npm and the Actions themselves; each one is validated by the same CI before you merge.
+
+> **Runtime error monitoring** is a natural next layer: **Sentry**'s free tier (5k events/mo) would capture frontend + Django exceptions in production. Wired behind a `SENTRY_DSN` env var so it stays off until a key is set — same graceful-degradation pattern as the AI features.
+
+**Hardened ("saneado") deploy** (`.github/workflows/deploy-vps.yml`) — on merge to `main` (or manual `workflow_dispatch`) the stack deploys over SSH, designed to be safe on a server that hosts other live apps:
+
+- **Isolated** — its own Compose project, network and volume, bound only to `127.0.0.1:3300`; it can't collide with neighbours.
+- **Idempotent Caddy wiring** — adds the `notes.cardenas.pe` block only if absent, then **`caddy validate` before `reload`** — a bad edit is rejected, never taking down other sites; reload (not restart) so existing certs/connections survive.
+- **Health-checked** — after `up -d --build` it curls `/api/health` and fails the job if the app isn't serving.
+- **Secrets** live only in GitHub Actions secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`) — never in the repo; the `.env` is written on the box at deploy time with `chmod 600`.
+
+> First-time setup: add those five repository secrets under **Settings → Secrets and variables → Actions**, and (recommended) protect `main` with a branch rule requiring the **Backend** and **Frontend** CI checks to pass before merge.
 
 ## Design fidelity
 

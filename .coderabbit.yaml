@@ -1,0 +1,24 @@
+# CodeRabbit — free AI code review for pull requests.
+# https://coderabbit.ai  ·  free for open-source / public repos.
+# Setup: install the CodeRabbit GitHub App on this repo (one click, no API key
+# needed for public repos). It then reviews every PR automatically: a high-level
+# summary, line-by-line suggestions, and answers to @coderabbitai questions.
+language: en-US
+reviews:
+  profile: chill                 # helpful, not nitpicky
+  request_changes_workflow: false # advisory — never blocks merge by itself
+  high_level_summary: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false                # skip draft PRs
+  path_filters:
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!**/*.png"
+    - "!**/*.svg"
+    - "!backend/.venv/**"
+    - "!frontend/.next/**"
+chat:
+  auto_reply: true

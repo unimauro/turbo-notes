@@ -89,9 +89,7 @@ class TestTranscribePost:
 
     @override_settings(**ENABLED)
     def test_empty_audio_returns_400(self, client):
-        response = client.post(
-            TRANSCRIBE_URL, {"audio": audio_upload(size=0)}, format="multipart"
-        )
+        response = client.post(TRANSCRIBE_URL, {"audio": audio_upload(size=0)}, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "empty" in response.json()["detail"]
 
