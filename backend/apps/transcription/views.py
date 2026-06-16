@@ -9,6 +9,7 @@ Returns 503 when no API key is configured, so the app works fully without one.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from django.conf import settings
@@ -24,6 +25,8 @@ from apps.audit.models import AiUsageEvent
 from apps.audit.services import log_ai_usage
 
 from .services import TranscriptionError, transcribe
+
+logger = logging.getLogger(__name__)
 
 # Accepted audio extensions (mirrors what Whisper supports).
 ALLOWED_EXTENSIONS = {".webm", ".ogg", ".oga", ".mp3", ".mpeg", ".mpga", ".wav", ".m4a", ".mp4"}
@@ -129,8 +132,11 @@ class TranscribeView(APIView):
                 input_size=audio.size,
                 success=False,
             )
+            logger.warning("Transcription failed: %s", exc)
             return Response(
-                {"detail": str(exc)},
+                # Fixed message — never surface the exception text to the client
+                # (the underlying provider error is chained + logged server-side).
+                {"detail": "Transcription provider request failed"},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 

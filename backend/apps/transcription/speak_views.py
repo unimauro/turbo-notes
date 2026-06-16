@@ -10,6 +10,8 @@ Returns 503 when no API key is configured, so the app works fully without one.
 
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from django.http import HttpResponse
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -23,6 +25,8 @@ from apps.audit.models import AiUsageEvent
 from apps.audit.services import log_ai_usage
 
 from .tts import ALLOWED_VOICES, SpeechError, synthesize
+
+logger = logging.getLogger(__name__)
 
 
 class SpeakView(APIView):
@@ -124,8 +128,11 @@ class SpeakView(APIView):
                 input_size=len(text),
                 success=False,
             )
+            logger.warning("Text-to-speech failed: %s", exc)
             return Response(
-                {"detail": str(exc)},
+                # Fixed message — never surface the exception text to the client
+                # (the underlying provider error is chained + logged server-side).
+                {"detail": "Text-to-speech provider request failed"},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
