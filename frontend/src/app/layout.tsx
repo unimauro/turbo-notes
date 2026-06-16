@@ -13,33 +13,58 @@ const playfair = Playfair_Display({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://notes.cardenas.pe";
-const SITE_DESC = "A cozy little home for your charming notes — with AI voice notes.";
+const SITE_TITLE = "Turbo Notes — take notes by voice, with AI";
+const SITE_DESC =
+  "Take notes by voice: dictate with AI (Whisper), read them aloud, and auto-title hands-free by saying “close my note.” A cozy, fast notes app.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Turbo Notes",
+  title: { default: SITE_TITLE, template: "%s · Turbo Notes" },
   description: SITE_DESC,
+  applicationName: "Turbo Notes",
+  authors: [{ name: "Carlos Cárdenas", url: "https://github.com/unimauro" }],
+  creator: "Carlos Cárdenas",
+  category: "productivity",
+  keywords: [
+    "voice notes",
+    "notes by voice",
+    "AI notes app",
+    "voice dictation",
+    "speech to text",
+    "Whisper",
+    "read notes aloud",
+    "text to speech",
+    "hands-free notes",
+    "note taking app",
+  ],
+  alternates: { canonical: "/" },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
   openGraph: {
-    title: "Turbo Notes",
+    title: SITE_TITLE,
     description: SITE_DESC,
     url: SITE_URL,
     siteName: "Turbo Notes",
+    locale: "en_US",
     type: "website",
     images: [
       {
-        url: "/og.png?v=2",
+        url: "/og.png?v=3",
         width: 1200,
         height: 630,
         type: "image/png",
-        alt: "Turbo Notes — a cozy little home for your charming notes",
+        alt: "Turbo Notes — take notes by voice, with AI dictation, read-aloud and auto-title",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Turbo Notes",
+    title: SITE_TITLE,
     description: SITE_DESC,
-    images: ["/og.png?v=2"],
+    images: ["/og.png?v=3"],
   },
 };
 
@@ -63,6 +88,35 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Structured data — helps search engines render a rich result. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "Turbo Notes",
+              url: SITE_URL,
+              applicationCategory: "ProductivityApplication",
+              operatingSystem: "Web",
+              description: SITE_DESC,
+              offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+              featureList: [
+                "Voice dictation (AI)",
+                "Read notes aloud (text-to-speech)",
+                "Auto-title and summarize with AI",
+                "Hands-free “close my note” command",
+                "Color-coded categories",
+                "Autosaving editor",
+              ],
+              author: {
+                "@type": "Person",
+                name: "Carlos Cárdenas",
+                url: "https://github.com/unimauro",
+              },
+            }),
+          }}
+        />
         <GoogleAnalytics />
       </head>
       <body className="flex min-h-full flex-col bg-cream font-sans text-ink-soft dark:bg-bark dark:text-linen">
