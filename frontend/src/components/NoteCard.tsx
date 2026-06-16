@@ -38,7 +38,7 @@ export default function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
       onClick={() => onEdit(note)}
       onKeyDown={handleKeyDown}
       style={{ backgroundColor: palette.bg, borderColor: palette.border }}
-      className="tinted group relative flex cursor-pointer flex-col rounded-xl border p-5 transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-ink/30"
+      className="tinted group relative flex h-full cursor-pointer flex-col rounded-xl border p-5 transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-ink/30"
     >
       <p className="text-xs text-ink/80">
         <span className="font-bold">{formatCardDate(note.updated_at)}</span>
