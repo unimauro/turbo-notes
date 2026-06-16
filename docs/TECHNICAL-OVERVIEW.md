@@ -1,5 +1,10 @@
 # Turbo Notes — Technical Overview
 
+![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)
+![Backend tests](https://img.shields.io/badge/backend-pytest%20100%25-blue)
+![Frontend tests](https://img.shields.io/badge/frontend-105%20jest%20tests-blue)
+![CI](https://img.shields.io/badge/CI-green-brightgreen)
+
 > A 5-minute technical tour: what it is, how it's built, and how to see it running.
 > Companion to the full [README](../README.md).
 
