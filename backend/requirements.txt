@@ -1,5 +1,5 @@
 # Runtime
-Django==5.2.15
+Django==6.0.6
 djangorestframework==3.17.1
 django-cors-headers==4.9.0
 drf-spectacular==0.29.0
