@@ -49,3 +49,9 @@ export interface RegisteredUser {
   id: number;
   email: string;
 }
+
+/** Auth — current user returned by GET /auth/me/. */
+export interface Me {
+  id: number;
+  email: string;
+}

@@ -11,6 +11,7 @@ User = get_user_model()
 REGISTER_URL = reverse("auth-register")
 TOKEN_URL = reverse("auth-token")
 REFRESH_URL = reverse("auth-token-refresh")
+ME_URL = reverse("auth-me")
 
 EMAIL = "ada@example.com"
 PASSWORD = "correct-horse-9"
@@ -117,6 +118,22 @@ class TestJwtEndToEnd:
         response = client.get(reverse("note-list"))
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["count"] == 0
+
+
+class TestMe:
+    def test_returns_id_and_email_when_authenticated(self, client):
+        body = register(client).json()
+        tokens = client.post(
+            TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json"
+        ).json()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+        response = client.get(ME_URL)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"id": body["id"], "email": EMAIL}
+
+    def test_requires_authentication(self, client):
+        response = client.get(ME_URL)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 class TestAuthThrottle:

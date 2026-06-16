@@ -1,7 +1,9 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -72,3 +74,14 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             user=user,
         )
         return response
+
+
+@extend_schema(tags=["auth"])
+class MeView(APIView):
+    """GET -> 200 {id, email} for the authenticated user (401 otherwise)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({"id": user.id, "email": user.email or user.username})

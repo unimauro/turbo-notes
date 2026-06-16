@@ -146,11 +146,45 @@ html.dark {
   animation: editor-evaporate 0.5s ease-in forwards;
 }
 
+/* Loading transitions for the board:
+   - fade-in: skeleton grid gently appears (opacity only).
+   - fade-in-up: real notes fade + slide up subtly on first render so the
+     loaded list doesn't hard-pop in. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
+
+.fade-in-up {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dictation-bar,
   .dictation-dot,
   .editor-enter,
-  .turbo-materialize {
+  .turbo-materialize,
+  .fade-in,
+  .fade-in-up {
     animation: none;
   }
 

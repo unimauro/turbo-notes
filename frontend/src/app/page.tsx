@@ -10,6 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
 import NoteEditor from "@/components/NoteEditor";
 import NoteList from "@/components/NoteList";
+import ProfileMenu from "@/components/ProfileMenu";
 import SkeletonCard from "@/components/SkeletonCard";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useCategories } from "@/hooks/useCategories";
@@ -96,13 +97,7 @@ function Board() {
     <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
       <header className="flex items-center justify-end gap-3">
         <ThemeToggle />
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="text-xs text-ink-line underline underline-offset-2 transition-colors hover:text-ink dark:text-linen-soft dark:hover:text-linen"
-        >
-          Log out
-        </button>
+        <ProfileMenu onLogout={handleLogout} />
         <button
           type="button"
           onClick={() => setEditorTarget("new")}
@@ -125,7 +120,7 @@ function Board() {
             <div
               role="status"
               aria-label="Loading notes"
-              className="columns-1 gap-5 sm:columns-2 xl:columns-3"
+              className="fade-in columns-1 gap-5 sm:columns-2 xl:columns-3"
             >
               {Array.from({ length: 6 }, (_, i) => (
                 <div key={i} className="mb-5 break-inside-avoid">
@@ -141,11 +136,13 @@ function Board() {
 
           {!isPending && !isError && notes.length > 0 && (
             <>
-              <NoteList
-                notes={notes}
-                onEdit={(note) => setEditorTarget(note)}
-                onDelete={(note) => setDeleteTarget(note)}
-              />
+              <div className="fade-in-up">
+                <NoteList
+                  notes={notes}
+                  onEdit={(note) => setEditorTarget(note)}
+                  onDelete={(note) => setDeleteTarget(note)}
+                />
+              </div>
 
               {/* Sentinel: scrolling it into view loads the next page. */}
               <div ref={sentinelRef} aria-hidden="true" className="h-px" />

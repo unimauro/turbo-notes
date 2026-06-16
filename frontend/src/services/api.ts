@@ -19,9 +19,16 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-/** Auth endpoints must never trigger the refresh-and-retry dance. */
+/**
+ * Credential endpoints (login/register/refresh) must never carry a Bearer token
+ * nor trigger the refresh-and-retry dance. Note that authenticated endpoints
+ * like `/auth/me/` are intentionally NOT matched here — they need the token
+ * attached and should participate in the normal 401 refresh flow.
+ */
 function isAuthUrl(url: string | undefined): boolean {
-  return Boolean(url?.includes("/auth/"));
+  return Boolean(
+    url?.includes("/auth/token") || url?.includes("/auth/register"),
+  );
 }
 
 /** Request interceptor: attach the Bearer token when one is stored. */

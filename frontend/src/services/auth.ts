@@ -1,5 +1,5 @@
 import { api } from "@/services/api";
-import type { RegisteredUser, TokenPair } from "@/types/note";
+import type { Me, RegisteredUser, TokenPair } from "@/types/note";
 
 /** POST /auth/register/ — duplicate email surfaces as 400 {"email": [...]}. */
 export async function register(
@@ -32,5 +32,11 @@ export async function refreshToken(
   const { data } = await api.post<{ access: string }>("/auth/token/refresh/", {
     refresh,
   });
+  return data;
+}
+
+/** GET /auth/me/ — the authenticated user ({ id, email }). */
+export async function getMe(): Promise<Me> {
+  const { data } = await api.get<Me>("/auth/me/");
   return data;
 }
