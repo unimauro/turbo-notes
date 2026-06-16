@@ -9,6 +9,8 @@ Returns 503 when no API key is configured, so the app works fully without one.
 
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
@@ -18,6 +20,8 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .assist import ALLOWED_ACTIONS, AssistError, assist
+
+logger = logging.getLogger(__name__)
 
 # Reject assist requests longer than this (keeps responses fast/cheap). The
 # service truncates beyond this, but we reject outright to surface the limit.
@@ -111,8 +115,11 @@ class AssistView(APIView):
         try:
             result = assist(text, action)
         except AssistError as exc:
+            logger.warning("AI assist failed: %s", exc)
             return Response(
-                {"detail": str(exc)},
+                # Fixed message — never surface the exception text to the client
+                # (the underlying provider error is chained + logged server-side).
+                {"detail": "AI assist provider request failed"},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
