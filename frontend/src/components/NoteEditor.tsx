@@ -26,6 +26,7 @@ import { useWhisperRecorder } from "@/hooks/useWhisperRecorder";
 import { categoryPalette } from "@/lib/colors";
 import { loadVoices, pickVoice, speakWithBrowser } from "@/lib/speech";
 import { formatEditorTimestamp } from "@/lib/time";
+import { stripTurboClose } from "@/lib/voiceCommand";
 import { assist, getAssistEnabled } from "@/services/assist";
 import type { ListNotesParams } from "@/services/notes";
 import { getTranscriptionEnabled } from "@/services/transcription";
@@ -74,6 +75,12 @@ export default function NoteEditor({
   // Surfaced when the final flush on close fails; we keep the editor open so the
   // user doesn't lose their last edit.
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ---- "Turbo close" hands-free command -----------------------------------
+  // Set when the AI-generated title is applied so the heading plays a one-shot
+  // "materialize" animation, and when the whole overlay is "evaporating" out.
+  const [titleMaterializing, setTitleMaterializing] = useState(false);
+  const [evaporating, setEvaporating] = useState(false);
 
   // Derived (no effect needed): user pick > note's category > seeded default.
   const category =
@@ -167,6 +174,12 @@ export default function NoteEditor({
     },
     [],
   );
+
+  // Guards the hands-free "Turbo close" sequence so a second match (or a stray
+  // final transcript) can't re-trigger it. Lets appendDictation (declared before
+  // turboClose) reach the latest sequence fn without re-subscribing handlers.
+  const turboClosingRef = useRef(false);
+  const turboCloseRef = useRef<(() => void) | null>(null);
 
   const closingRef = useRef(false);
   async function handleClose() {
@@ -354,18 +367,31 @@ export default function NoteEditor({
   // closure; React state is then synced from that authoritative value.
   const appendDictation = useCallback(
     (text: string) => {
-      const snapshot = latestRef.current;
-      const current = snapshot.content;
-      const sep = current.length === 0 || /\s$/.test(current) ? "" : " ";
-      const next = current + sep + text;
-      setContent(next);
+      // Hands-free "Turbo close": if the spoken transcript contains the command
+      // phrase, strip it out (so the literal words never land in the note),
+      // append any remaining real text, then trigger the close sequence.
+      const { cleaned, triggered } = stripTurboClose(text);
+      const append = triggered ? cleaned : text;
+
+      if (append) {
+        const snapshot = latestRef.current;
+        const current = snapshot.content;
+        const sep = current.length === 0 || /\s$/.test(current) ? "" : " ";
+        const next = current + sep + append;
+        setContent(next);
+        scheduleSave({
+          title: snapshot.title,
+          content: next,
+          category: snapshot.category,
+        });
+      }
       // A working append means any prior transcribe error is stale; clear it.
       setTranscribeError(null);
-      scheduleSave({
-        title: snapshot.title,
-        content: next,
-        category: snapshot.category,
-      });
+
+      if (triggered && !turboClosingRef.current) {
+        turboClosingRef.current = true;
+        turboCloseRef.current?.();
+      }
     },
     [scheduleSave],
   );
@@ -523,6 +549,72 @@ export default function NoteEditor({
     setSummary(null);
   }
 
+  // ---- "Turbo close" sequence ---------------------------------------------
+  // Triggered hands-free from the dictation/Whisper transcript (see
+  // appendDictation). Stops capture, optionally generates a title with AI,
+  // plays the title-materialize + overlay-evaporation animations, flushes, and
+  // closes. Resilient end-to-end: a failing assist or flush never leaves the
+  // editor stuck — we always evaporate and call onClose().
+  const turboClose = useCallback(async () => {
+    // Silence every capture/playback path before doing anything else.
+    whisperStop();
+    dictationStop();
+    stopPlaybackRef.current?.();
+    setSpeaking(false);
+    setSpeakLoading(false);
+
+    // (2) Generate a title with AI only when the title is empty and assist is on.
+    const snapshot = latestRef.current;
+    if (!snapshot.title.trim() && assistEnabled) {
+      const body = snapshot.content.trim();
+      if (body) {
+        try {
+          const suggestion = (await assist(body, "title")).trim();
+          if (suggestion) {
+            setTitle(suggestion);
+            // Persist via the same latestRef + scheduleSave path used elsewhere.
+            const latest = latestRef.current;
+            scheduleSave({
+              title: suggestion,
+              content: latest.content,
+              category: latest.category,
+            });
+            // (3) Play the one-shot title "materialize" animation.
+            setTitleMaterializing(true);
+          }
+        } catch {
+          // Never block closing on an assist failure.
+        }
+      }
+    }
+
+    // (4) Brief beat so the user sees the title appear, then evaporate + close.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    setEvaporating(true);
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    try {
+      await flush();
+    } catch {
+      // Hands-free convenience: close regardless.
+    }
+    onClose();
+  }, [
+    whisperStop,
+    dictationStop,
+    assistEnabled,
+    scheduleSave,
+    flush,
+    onClose,
+  ]);
+
+  // Expose the latest turboClose to appendDictation (declared earlier). Written
+  // in an effect only (never during render) per this file's ref-write rule.
+  useEffect(() => {
+    turboCloseRef.current = () => {
+      void turboClose();
+    };
+  }, [turboClose]);
+
   // ---- UI -----------------------------------------------------------------
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -557,7 +649,9 @@ export default function NoteEditor({
       aria-modal="true"
       aria-label={note ? "Edit note" : "New note"}
       onKeyDown={handleKeyDown}
-      className="fixed inset-0 z-40 flex flex-col bg-cream px-4 py-4 sm:px-8 sm:py-6 dark:bg-bark"
+      className={`fixed inset-0 z-40 flex flex-col bg-cream px-4 py-4 sm:px-8 sm:py-6 dark:bg-bark ${
+        evaporating ? "turbo-evaporate" : ""
+      }`}
     >
       <header className="flex items-center justify-between">
         <div className="relative">
@@ -672,7 +766,9 @@ export default function NoteEditor({
             });
           }}
           placeholder="Note Title"
-          className="mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none"
+          className={`mt-3 w-full bg-transparent font-serif text-3xl font-bold text-ink placeholder:text-ink/40 focus:outline-none ${
+            titleMaterializing ? "turbo-materialize" : ""
+          }`}
         />
 
         {assistEnabled && (
@@ -798,6 +894,15 @@ export default function NoteEditor({
             className="absolute bottom-20 left-5 max-w-[70%] text-left text-sm text-red-600 sm:bottom-24 sm:left-7 dark:text-red-400"
           >
             {saveError}
+          </p>
+        )}
+
+        {recording && (
+          <p
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-[4.25rem] right-5 select-none text-right text-xs italic text-ink/45 sm:bottom-[5.25rem] sm:right-7"
+          >
+            Say &ldquo;Turbo close&rdquo; to finish
           </p>
         )}
 

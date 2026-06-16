@@ -73,9 +73,55 @@ html.dark {
   animation: live-pulse 1.2s ease-in-out infinite;
 }
 
+/* "Turbo close" hands-free command animations.
+   - title-materialize: when an AI-generated title is applied, the heading fades
+     and scales/blurs in for a one-shot "materializing" beat.
+   - editor-evaporate: the whole overlay fades out, scales up slightly and blurs
+     as it gracefully dissolves before unmounting. */
+@keyframes title-materialize {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes editor-evaporate {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+    filter: blur(8px);
+  }
+}
+
+.turbo-materialize {
+  animation: title-materialize 0.6s ease-out both;
+}
+
+.turbo-evaporate {
+  animation: editor-evaporate 0.5s ease-in forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dictation-bar,
-  .dictation-dot {
+  .dictation-dot,
+  .turbo-materialize {
     animation: none;
+  }
+
+  /* Still hide the overlay on evaporate, but without the motion. */
+  .turbo-evaporate {
+    animation: none;
+    opacity: 0;
   }
 }
