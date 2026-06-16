@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turbo Notes — project hub</title>
+<meta name="description" content="Turbo Notes — a cozy notes app with AI voice. Live demo, exposition deck and technical overview.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --cream:#fbf7ee; --paper:#f4ecd8; --ink:#34301f; --soft:#6b6450; --olive:#5f6b34; --terra:#b06a33; --line:#e3dac4;
+         --coral:#e8a06d; --yellow:#ead98c; --teal:#9bc1b0; --lav:#b9a8d0; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:'Inter',system-ui,sans-serif; color:var(--ink); line-height:1.6;
+        background:
+          radial-gradient(1100px 640px at 88% -8%, rgba(176,106,51,.07), transparent 60%),
+          radial-gradient(900px 600px at -8% 108%, rgba(95,107,52,.08), transparent 60%),
+          var(--cream);
+        min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px; }
+  .wrap{ max-width:680px; width:100%; }
+  .chips{ margin-bottom:18px; }
+  .chip{ display:inline-block; width:13px; height:13px; border-radius:4px; margin-right:5px; vertical-align:middle; }
+  .pill{ display:inline-block; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+         color:#7a5a1e; background:var(--yellow); border-radius:999px; padding:5px 14px; }
+  h1{ font-family:'Playfair Display',serif; font-weight:800; font-size:clamp(40px,8vw,64px); color:var(--olive);
+      letter-spacing:-1px; line-height:1; margin:18px 0 8px; }
+  .lead{ font-size:18px; color:var(--soft); margin-bottom:28px; max-width:46ch; }
+  .lead em{ color:var(--terra); font-style:normal; font-weight:600; }
+  .cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  a.card{ display:block; text-decoration:none; color:var(--ink); background:var(--paper); border:1px solid var(--line);
+          border-radius:14px; padding:18px 20px; transition:transform .15s ease, box-shadow .15s ease; }
+  a.card:hover{ transform:translateY(-3px); box-shadow:0 12px 28px rgba(52,48,31,.12); }
+  a.card .t{ font-weight:600; font-size:16px; display:flex; align-items:center; gap:8px; }
+  a.card .d{ font-size:13px; color:var(--soft); margin-top:4px; }
+  a.live{ background:#fff4ea; border-color:#eccdb0; }
+  a.live .t{ color:var(--terra); }
+  .foot{ margin-top:26px; font-size:13px; color:#a79c80; }
+  .foot a{ color:var(--terra); text-decoration:none; }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="chips">
+      <span class="chip" style="background:var(--coral)"></span><span class="chip" style="background:var(--yellow)"></span><span class="chip" style="background:var(--teal)"></span><span class="chip" style="background:var(--lav)"></span>
+      <span class="pill">Senior Full Stack · Turbo AI</span>
+    </div>
+    <h1>Turbo&nbsp;Notes</h1>
+    <p class="lead">A cozy little home for your charming notes — <em>with AI voice</em>. Django&nbsp;5&nbsp;·&nbsp;DRF&nbsp;·&nbsp;Postgres&nbsp;|&nbsp;Next.js&nbsp;16&nbsp;·&nbsp;TypeScript&nbsp;·&nbsp;TanStack&nbsp;Query.</p>
+
+    <div class="cards">
+      <a class="card live" href="https://notes.cardenas.pe">
+        <span class="t">🔴 Live demo</span>
+        <span class="d">notes.cardenas.pe — log in with demo@turbo.ai / demo12345</span>
+      </a>
+      <a class="card" href="slides.html">
+        <span class="t">🎞️ Exposition deck</span>
+        <span class="d">7-slide technical tour (present in browser)</span>
+      </a>
+      <a class="card" href="Turbo-Notes-Slides.pdf">
+        <span class="t">📄 Deck (PDF)</span>
+        <span class="d">Portable landscape export</span>
+      </a>
+      <a class="card" href="https://github.com/unimauro/turbo-notes/blob/main/docs/TECHNICAL-OVERVIEW.md">
+        <span class="t">📐 Technical overview</span>
+        <span class="d">Stack · architecture · CI/CD (rendered on GitHub)</span>
+      </a>
+      <a class="card" href="https://github.com/unimauro/turbo-notes">
+        <span class="t">💻 Source code</span>
+        <span class="d">github.com/unimauro/turbo-notes</span>
+      </a>
+    </div>
+
+    <p class="foot">Built by <a href="https://github.com/unimauro">Carlos Cárdenas</a> · 100% test coverage · OWASP Top 10 · CI green.</p>
+  </main>
+</body>
+</html>
