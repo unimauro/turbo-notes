@@ -14,7 +14,9 @@ The guiding principle throughout: **the right amount of engineering for the scop
 - **Per-user notes** — every note has an owner; all notes endpoints require auth and are scoped to the requesting user (another user's note ids return 404, not 403 — no existence leaking).
 - **Categories** — four seeded categories (Random Thoughts · School · Personal · Drama), each note belongs to one; sidebar shows per-user note counts and filters the board (`?category=<id>` on the API).
 - **Autosave editor** — fullscreen takeover with **no save button**, matching the prototype: the note is created on the first keystroke, then PATCHed with an 800 ms debounce; pending changes flush on close (X). Changing category instantly recolors the card. Blank titles are allowed end-to-end (drafts exist before titles do).
-- **Voice to text** — dictate notes by mic: free in-browser Web Speech dictation out of the box, with optional **AI (Whisper) transcription** when an `OPENAI_API_KEY` is set (OpenAI-compatible, works with Groq too); the app falls back to free browser dictation when no key is configured — see [AI transcription](#ai-transcription-whisper)
+- **Voice, both ways (AI)** — *dictate* a note by mic (**OpenAI Whisper** when a key is set, else free in-browser Web Speech) and *read it aloud* (**OpenAI TTS**, a soft natural voice, else the browser's). Each path degrades gracefully when no key is configured — see [AI transcription](#ai-transcription-whisper).
+- **Security** — rate limiting on auth (10/min) and the paid AI endpoints (20/min), HTTPS + HSTS + secure cookies in prod, owner-scoped access (404 not 403), ORM-only queries with allow-listed filters. Full **[OWASP Top 10](SECURITY.md)** write-up.
+- **Admin & observability** — a Django admin back-office (`/admin/`) over users and notes, plus an **auth audit log** (login/register events with IP) and **OpenAI usage tracking** (every transcribe/speak call) — closing the security-logging gap.
 - Notes CRUD — list, create, edit, delete (hover trash icon + confirmation)
 - Pagination (12 per page, client-tunable up to 100) and ordering (default `-updated_at`)
 - `?search=` over title and content remains on the API (the prototype shows no search box, so the UI doesn't render one — see Design fidelity)
@@ -278,21 +280,21 @@ Because the endpoint is **OpenAI-compatible**, it works unchanged with OpenAI or
 
 ## Testing
 
-Backend — **94 tests, 100% coverage** on `apps/` (target was ≥85%):
+Backend — **141 tests, 100% coverage** on `apps/` (target was ≥85%):
 
 ```bash
 cd backend && source .venv/bin/activate
-pytest --cov=apps --cov-report=term    # 94 passed
+pytest --cov=apps --cov-report=term    # 141 passed
 flake8 && black --check . && isort --check-only .
 ```
 
 Coverage spans models (category seed order, PROTECT on category, CASCADE on owner, blank titles), serializers (default category, `category_id` writes, unknown category → 400, output shape), the full API surface — a 401 matrix for every unauthenticated endpoint, per-user scoping (reading/patching/deleting another user's note → 404), category filtering including non-numeric params, per-user category counts, plus all the original CRUD/pagination/search/ordering tests now auth-aware — and auth itself: register shape, email lowercasing, case-insensitive duplicates, weak-password rejection, token obtain/refresh, wrong credentials, and an end-to-end Bearer round trip.
 
-Frontend — **58 tests, 11 suites**:
+Frontend — **72 tests, 13 suites**:
 
 ```bash
 cd frontend
-npm test          # 58 passed
+npm test          # 72 passed
 npm run lint      # 0 problems
 npm run build     # must pass (CI enforces it)
 ```
@@ -345,7 +347,7 @@ The rest of this section is the honest division of labor.
 
 **Workflow:** I worked from a written brief plus a frame-by-frame design spec of the prototype video as the single source of truth, ran specialized agent sessions for backend and frontend with explicit quality gates (tests green, lint clean, build passing — verified by actually running them, not by assertion), and reviewed the output against the spec before integration. Where the two halves had to agree — the auth contract, the category slug palette, the pagination envelope, CORS, the build-time inlining of `NEXT_PUBLIC_API_URL` — I verified the contract on both sides myself, including an end-to-end curl smoke test of register → token → create → filter.
 
-**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 94 + 58 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
+**Net effect:** roughly a 3-4x speedup on a challenge of this scope, with the time saved reinvested where it compounds — test depth (100% backend coverage, 141 + 72 tests), edge cases, and this documentation. AI didn't make the decisions; it made the decisions cheaper to execute well.
 
 ## Security
 

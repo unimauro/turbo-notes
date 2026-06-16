@@ -12,9 +12,27 @@ const playfair = Playfair_Display({
   variable: "--font-playfair",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://notes.cardenas.pe";
+const SITE_DESC = "A cozy little home for your charming notes — with AI voice notes.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Turbo Notes",
-  description: "A cozy little home for your charming notes.",
+  description: SITE_DESC,
+  openGraph: {
+    title: "Turbo Notes",
+    description: SITE_DESC,
+    url: SITE_URL,
+    siteName: "Turbo Notes",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Turbo Notes" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Turbo Notes",
+    description: SITE_DESC,
+    images: ["/og.png"],
+  },
 };
 
 /**

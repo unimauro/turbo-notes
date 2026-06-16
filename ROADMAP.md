@@ -34,6 +34,7 @@ app does the thinking, not just the storing.
 | Smart summaries | One-line TL;DR on long notes; "summarize this" | ★★★ | ★★ |
 | Writing assistant | Continue / rewrite / expand a note inline | ★★★ | ★★ |
 | Multi-language transcription | Whisper already supports it; surface a language picker | ★★ | ★ |
+| Multilingual notes + AI auto-translate | Detect a note's original language, tag it ("written in English / Spanish"), and offer one-tap AI translation while preserving the original | ★★★★ | ★★★ |
 
 ## Product & UX (the delight tier)
 
