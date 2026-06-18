@@ -367,6 +367,7 @@ All `/notes/` and `/categories/` endpoints require `Authorization: Bearer <acces
 | POST | `/api/v1/auth/register/` | — | Body `{email, password}`. Email lowercased; duplicates (case-insensitive) → 400 `{"email": [...]}`; Django password validators apply. Returns 201 `{id, email}`. |
 | POST | `/api/v1/auth/token/` | — | Body `{email, password}` → 200 `{access, refresh}`; wrong credentials → 401. |
 | POST | `/api/v1/auth/token/refresh/` | — | Body `{refresh}` → 200 `{access}`. |
+| POST | `/api/v1/auth/password-reset/` | — | Body `{email, password}` → always 200 (generic message, no email enumeration). Sets the password directly. **Simple by design: no email round-trip** — see tradeoff below. Django password validators apply (weak → 400); IP-throttled like login. |
 | GET | `/api/v1/notes/` | ✔ | List **your** notes. Query params: `category` (id), `search` (title+content), `ordering` (`updated_at`, `created_at`, `title`, prefix `-`), `page`, `page_size` (max 100). DRF envelope `{count, next, previous, results}`. |
 | POST | `/api/v1/notes/` | ✔ | Create. Body: `{title?, content?, category_id?}`. Title optional/blank (autosave drafts); category defaults to Random Thoughts; unknown `category_id` → 400. Returns 201 with nested `category` `{id, name, color}`. |
 | GET / PATCH / PUT / DELETE | `/api/v1/notes/{id}/` | ✔ | Retrieve / update / delete your note. Another user's id → 404. |
@@ -376,6 +377,8 @@ All `/notes/` and `/categories/` endpoints require `Authorization: Bearer <acces
 | GET | `/api/health` | — | Liveness probe (no DB access). |
 
 Validation errors return DRF's structured 400 shape, e.g. `{"email": ["A user with this email already exists."]}` — which the frontend surfaces inline.
+
+> **Password reset — deliberate scope tradeoff.** The reset flow (`/reset` page → `/api/v1/auth/password-reset/`) is intentionally **simple: no emailed token/confirmation step**. Anyone who knows an address can set its password, bounded only by the shared login throttle. This keeps the demo self-serve without an email dependency. The endpoint still (a) runs Django's password validators, (b) returns an identical generic 200 whether or not the account exists (no email enumeration), and (c) audits real resets. The production-grade upgrade is the standard signed-token-by-email flow (`default_token_generator` + the VPS's existing mail) — a documented next step, not wired up here.
 
 ## AI usage
 

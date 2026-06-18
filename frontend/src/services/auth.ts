@@ -25,6 +25,19 @@ export async function obtainToken(
   return data;
 }
 
+/**
+ * POST /auth/password-reset/ — simple reset, no email round-trip.
+ *
+ * Always resolves 200 with a generic message (the API never reveals whether
+ * the email exists), so the UI should just tell the user to try logging in.
+ */
+export async function resetPassword(
+  email: string,
+  password: string,
+): Promise<void> {
+  await api.post("/auth/password-reset/", { email, password });
+}
+
 /** POST /auth/token/refresh/ */
 export async function refreshToken(
   refresh: string,

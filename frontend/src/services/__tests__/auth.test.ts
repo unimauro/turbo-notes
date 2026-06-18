@@ -3,7 +3,12 @@ jest.mock("@/services/api", () => ({
 }));
 
 import { api } from "@/services/api";
-import { obtainToken, refreshToken, register } from "@/services/auth";
+import {
+  obtainToken,
+  refreshToken,
+  register,
+  resetPassword,
+} from "@/services/auth";
 
 const mockApi = api as jest.Mocked<typeof api>;
 
@@ -37,6 +42,19 @@ describe("obtainToken", () => {
       password: "hunter22pass",
     });
     expect(result).toEqual(tokens);
+  });
+});
+
+describe("resetPassword", () => {
+  it("POSTs email + new password to /auth/password-reset/", async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { detail: "ok" } });
+
+    await resetPassword("a@b.co", "fresh22pass");
+
+    expect(mockApi.post).toHaveBeenCalledWith("/auth/password-reset/", {
+      email: "a@b.co",
+      password: "fresh22pass",
+    });
   });
 });
 

@@ -9,10 +9,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { KawaiiCactus, KawaiiCat } from "@/components/Kawaii";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
-import { obtainToken, register } from "@/services/auth";
+import { obtainToken, register, resetPassword } from "@/services/auth";
 
 interface AuthScreenProps {
-  mode: "signup" | "login";
+  mode: "signup" | "login" | "reset";
 }
 
 /** Pulls a friendly message out of a DRF error payload. */
@@ -48,6 +48,13 @@ const COPY = {
     crossHref: "/signup",
     Illustration: KawaiiCactus,
   },
+  reset: {
+    heading: "Let's Reset That",
+    button: "Reset Password",
+    crossText: "Nevermind, take me to login",
+    crossHref: "/login",
+    Illustration: KawaiiCat,
+  },
 } as const;
 
 const inputClass =
@@ -63,6 +70,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Already signed in? Straight to the board.
@@ -76,6 +84,15 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
     setError(null);
     setSubmitting(true);
     try {
+      if (mode === "reset") {
+        // No email round-trip: the password changes immediately. The API
+        // returns the same 200 whether or not the account exists, so we show a
+        // neutral confirmation and send the user to login.
+        await resetPassword(email, password);
+        setSuccess("If that account exists, its password was updated. You can log in now.");
+        setSubmitting(false);
+        return;
+      }
       if (mode === "signup") {
         await register(email, password);
       }
@@ -86,6 +103,32 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       setError(errorMessage(err));
       setSubmitting(false);
     }
+  }
+
+  // Reset done: swap the form for a neutral confirmation + a path to login.
+  if (success) {
+    return (
+      <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
+        <div className="absolute right-4 top-4">
+          <ThemeToggle />
+        </div>
+        <div className="flex w-full max-w-xs flex-col items-stretch gap-4 text-center">
+          <Illustration className="mx-auto h-28 w-36 sm:h-32 sm:w-40" />
+          <h1 className="font-serif text-3xl font-bold text-ink dark:text-linen">
+            All set!
+          </h1>
+          <p role="status" className="text-sm text-ink-soft dark:text-linen-soft">
+            {success}
+          </p>
+          <Link
+            href="/login"
+            className="mt-2 h-11 rounded-full border border-ink-line bg-paper text-sm font-semibold leading-[2.75rem] text-ink transition-colors hover:bg-[#EFE3C8] dark:border-linen-soft/60 dark:bg-bark-soft dark:text-linen dark:hover:bg-[#46382a]"
+          >
+            Go to login
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -126,7 +169,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
           <input
             id="auth-password"
             type={showPassword ? "text" : "password"}
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -167,6 +210,15 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         >
           {copy.crossText}
         </Link>
+
+        {mode === "login" && (
+          <Link
+            href="/reset"
+            className="text-center text-xs text-ink-soft underline underline-offset-2 hover:text-ink dark:text-linen-soft dark:hover:text-linen"
+          >
+            Forgot your password?
+          </Link>
+        )}
       </form>
     </main>
   );

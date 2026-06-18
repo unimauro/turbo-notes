@@ -22,6 +22,7 @@ class AuthEvent(models.Model):
         LOGIN_SUCCESS = "login_success"
         LOGIN_FAILED = "login_failed"
         REGISTER = "register"
+        PASSWORD_RESET = "password_reset"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

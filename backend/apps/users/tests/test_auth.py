@@ -11,6 +11,7 @@ User = get_user_model()
 REGISTER_URL = reverse("auth-register")
 TOKEN_URL = reverse("auth-token")
 REFRESH_URL = reverse("auth-token-refresh")
+RESET_URL = reverse("auth-password-reset")
 ME_URL = reverse("auth-me")
 
 EMAIL = "ada@example.com"
@@ -91,6 +92,72 @@ class TestTokenObtain:
             TOKEN_URL, {"email": "ghost@example.com", "password": PASSWORD}, format="json"
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestPasswordReset:
+    NEW_PASSWORD = "fresh-horse-7"
+
+    def test_reset_changes_password_and_allows_login(self, client):
+        register(client)
+        response = client.post(
+            RESET_URL, {"email": EMAIL, "password": self.NEW_PASSWORD}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        # Old password no longer works...
+        old = client.post(TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json")
+        assert old.status_code == status.HTTP_401_UNAUTHORIZED
+        # ...and the new one does.
+        new = client.post(TOKEN_URL, {"email": EMAIL, "password": self.NEW_PASSWORD}, format="json")
+        assert new.status_code == status.HTTP_200_OK
+
+    def test_reset_is_case_insensitive_on_email(self, client):
+        register(client)
+        response = client.post(
+            RESET_URL, {"email": "ADA@example.com", "password": self.NEW_PASSWORD}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        user = User.objects.get(username=EMAIL)
+        assert user.check_password(self.NEW_PASSWORD)
+
+    def test_unknown_email_returns_generic_200_without_creating_user(self, client):
+        # No enumeration: same 200 whether or not the account exists.
+        response = client.post(
+            RESET_URL, {"email": "ghost@example.com", "password": self.NEW_PASSWORD}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert not User.objects.filter(username="ghost@example.com").exists()
+
+    @pytest.mark.parametrize("weak", ["short", "12345678", "password"])
+    def test_weak_password_rejected(self, client, weak):
+        register(client)
+        response = client.post(RESET_URL, {"email": EMAIL, "password": weak}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "password" in response.json()
+        # The original password must remain valid after a rejected reset.
+        assert User.objects.get(username=EMAIL).check_password(PASSWORD)
+
+    def test_missing_fields_return_400(self, client):
+        response = client.post(RESET_URL, {}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert set(response.json()) == {"email", "password"}
+
+    def test_reset_writes_audit_event(self, client):
+        from apps.audit.models import AuthEvent
+
+        register(client)
+        client.post(RESET_URL, {"email": EMAIL, "password": self.NEW_PASSWORD}, format="json")
+        event = AuthEvent.objects.filter(
+            email=EMAIL, event_type=AuthEvent.EventType.PASSWORD_RESET
+        ).first()
+        assert event is not None
+
+    def test_unknown_email_writes_no_audit_event(self, client):
+        from apps.audit.models import AuthEvent
+
+        client.post(
+            RESET_URL, {"email": "ghost@example.com", "password": self.NEW_PASSWORD}, format="json"
+        )
+        assert not AuthEvent.objects.filter(event_type=AuthEvent.EventType.PASSWORD_RESET).exists()
 
 
 class TestTokenRefresh:
