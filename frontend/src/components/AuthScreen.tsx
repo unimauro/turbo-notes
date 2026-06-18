@@ -96,8 +96,9 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       if (mode === "signup") {
         await register(email, password);
       }
-      const tokens = await obtainToken(email, password);
-      login(tokens);
+      // Sets the httpOnly auth cookies server-side; nothing to hold in JS.
+      await obtainToken(email, password);
+      login();
       router.replace("/");
     } catch (err) {
       setError(errorMessage(err));

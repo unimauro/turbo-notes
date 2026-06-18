@@ -192,7 +192,7 @@ The UI is built to match the official prototype video (auth screens, category si
 
 | Decision | Chosen | Alternative | Why |
 |---|---|---|---|
-| Token storage | `localStorage` + axios interceptors | `httpOnly` cookies | `localStorage` is exposed to XSS; cookies are immune to script reads but require CSRF protection and backend cookie issuance. For a pure token-issuing DRF API with 30-min access tokens, this is the pragmatic choice — and the swap is contained in `frontend/src/lib/tokens.ts` + `src/services/api.ts`. Documented, not hidden. |
+| Token storage | `httpOnly` cookies (cookie **or** Bearer auth) | `localStorage` | The SPA authenticates via `httpOnly` cookies set on login/refresh, so no token is ever readable by JS — immune to XSS exfiltration. The same-origin API (`/api` behind the proxy) makes `SameSite=Lax` a sufficient CSRF defence (Lax cookies aren't sent on cross-site POST/PUT/DELETE; our GETs are read-only), so no separate CSRF token is needed. The backend still accepts `Authorization: Bearer` for API clients, so the token endpoint stays scriptable. |
 | User model | Django's default `User` (email stored in `username` + `email`) | Custom `AUTH_USER_MODEL` | Swapping the user model mid-project forces a migration reset for marginal gain. The email-as-username invariant is enforced in one place (`RegisterSerializer`: lowercased, case-insensitive duplicate check). A greenfield app would start with a custom model. |
 | Cross-user access | 404 | 403 | Scoping in `get_queryset` means another user's note id simply doesn't exist for you — no resource-existence leaking. |
 | Editor UX | Fullscreen takeover + autosave (no save button) | Modal with explicit save / dedicated route | Matches the prototype exactly. Keyed mount (`key={note.id}`) prevents state leaking between notes; the board cache stays warm behind the overlay. Costs deep-linking — noted under future improvements. |
@@ -395,7 +395,7 @@ The challenge encourages AI tooling, so here is exactly what I used and how — 
 
 The rest of this section is the honest division of labor.
 
-**What I owned:** the architecture and every consequential decision — service-less DRF ViewSets over a ceremonial service layer; keeping Django's default `User` with the email invariant enforced in `RegisterSerializer` rather than swapping `AUTH_USER_MODEL` mid-project; 404-not-403 for cross-user access; category color as an API slug with the palette on the frontend; the default category resolved at serializer time; `localStorage` tokens with the httpOnly-cookie tradeoff written down rather than glossed over. I also owned code review: I read the generated code the way I'd review a teammate's PR, and rejected or reworked anything that didn't meet the bar.
+**What I owned:** the architecture and every consequential decision — service-less DRF ViewSets over a ceremonial service layer; keeping Django's default `User` with the email invariant enforced in `RegisterSerializer` rather than swapping `AUTH_USER_MODEL` mid-project; 404-not-403 for cross-user access; category color as an API slug with the palette on the frontend; the default category resolved at serializer time; `httpOnly`-cookie auth (cookie or Bearer) so no token is ever JS-readable, with `SameSite=Lax` as the CSRF defence for the same-origin API. I also owned code review: I read the generated code the way I'd review a teammate's PR, and rejected or reworked anything that didn't meet the bar.
 
 **What AI accelerated:** scaffolding (Django/Next layout, Dockerfiles, CI), the prototype-matching redesign (palette tokens, the original kawaii SVGs, the autosave editor), test generation against case lists I specified (the 401 matrix, per-user scoping, autosave debounce with fake timers, optimistic-rollback paths), and documentation drafts.
 
@@ -435,7 +435,6 @@ See **[ROADMAP.md](ROADMAP.md)** for the product vision — the AI-first "wow" f
 (realtime voice agent, ask-your-notes RAG, semantic search) prioritized by impact vs effort.
 The near-term engineering items:
 
-- **httpOnly-cookie token storage** — the hardened alternative to `localStorage`; contained in `lib/tokens.ts` + `services/api.ts` plus backend cookie issuance and CSRF.
 - **User-defined categories** — owner FK on `Category`, CRUD endpoints, color picker constrained to the palette slugs.
 - **Search UI** — the API already supports `?search=`; surfacing it is a design decision deferred to match the prototype.
 - **Conflict detection for autosave** — an `updated_at` precondition (or version field) so concurrent edits from two tabs don't silently last-write-win.
