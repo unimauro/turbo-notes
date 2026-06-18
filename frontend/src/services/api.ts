@@ -1,78 +1,65 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  setAccessToken,
-} from "@/lib/tokens";
-
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 /**
- * Single axios instance for the whole app. The base URL is resolved at build
- * time from NEXT_PUBLIC_API_URL so the same code works locally and in Docker.
+ * Single axios instance for the whole app. Auth is carried by httpOnly cookies
+ * (set by the backend on login/refresh), so every request must send them:
+ * `withCredentials: true`. No token is ever read or attached in JS — that's the
+ * whole point of the cookie approach (no XSS-readable token storage).
  */
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 /**
- * Credential endpoints (login/register/refresh) must never carry a Bearer token
- * nor trigger the refresh-and-retry dance. Note that authenticated endpoints
- * like `/auth/me/` are intentionally NOT matched here — they need the token
- * attached and should participate in the normal 401 refresh flow.
+ * Auth endpoints (login/register/refresh/logout) must never trigger the
+ * refresh-and-retry dance. `/auth/me/` is intentionally NOT matched: it carries
+ * the cookie and participates in the normal 401 refresh flow.
  */
 function isAuthUrl(url: string | undefined): boolean {
   return Boolean(
-    url?.includes("/auth/token") || url?.includes("/auth/register"),
+    url?.includes("/auth/token") ||
+      url?.includes("/auth/register") ||
+      url?.includes("/auth/logout"),
   );
-}
-
-/** Request interceptor: attach the Bearer token when one is stored. */
-export function attachAuthHeader(
-  config: InternalAxiosRequestConfig,
-): InternalAxiosRequestConfig {
-  const token = getAccessToken();
-  if (token && !isAuthUrl(config.url)) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 }
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retried?: boolean;
 }
 
+// Pages where a 401 is expected (the anonymous auth screens) — never bounce the
+// user away from them. Elsewhere (e.g. the board after the session expires) a
+// failed refresh sends them to login.
+const AUTH_PATHS = new Set(["/login", "/signup", "/reset"]);
+
 function redirectToLogin(): void {
-  clearTokens();
-  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+  if (typeof window !== "undefined" && !AUTH_PATHS.has(window.location.pathname)) {
     window.location.assign("/login");
   }
 }
 
 /**
  * A single, shared in-flight refresh promise. Concurrent 401s must NOT each
- * kick off their own token refresh; instead they all await this one promise and
- * replay once it settles. Reset to null on settle so a later 401 can refresh
- * again.
+ * kick off their own refresh; they all await this one and replay once it
+ * settles. Reset to null on settle so a later 401 can refresh again. The
+ * refresh token rides as an httpOnly cookie, so there's nothing to pass.
  */
-let refreshInFlight: Promise<string> | null = null;
+let refreshInFlight: Promise<void> | null = null;
 
-function refreshAccessToken(refresh: string): Promise<string> {
+function refreshSession(): Promise<void> {
   if (!refreshInFlight) {
     refreshInFlight = axios
-      .post<{ access: string }>(
+      .post(
         `${API_BASE_URL}/auth/token/refresh/`,
-        { refresh },
-        { headers: { "Content-Type": "application/json" } },
+        {},
+        { headers: { "Content-Type": "application/json" }, withCredentials: true },
       )
-      .then(({ data }) => {
-        setAccessToken(data.access);
-        return data.access;
-      })
+      .then(() => undefined)
       .finally(() => {
         refreshInFlight = null;
       });
@@ -81,9 +68,8 @@ function refreshAccessToken(refresh: string): Promise<string> {
 }
 
 /**
- * Response interceptor: on 401, try ONE token refresh and replay the request.
- * If the refresh fails (or there is no refresh token), clear everything and
- * send the user back to the login screen.
+ * Response interceptor: on 401, try ONE cookie-based refresh and replay the
+ * request. If the refresh fails, send the user back to the login screen.
  */
 export async function handleResponseError(error: unknown): Promise<unknown> {
   if (!(error instanceof AxiosError) || error.response?.status !== 401) {
@@ -96,18 +82,11 @@ export async function handleResponseError(error: unknown): Promise<unknown> {
     throw error;
   }
 
-  const refresh = getRefreshToken();
-  if (!refresh) {
-    redirectToLogin();
-    throw error;
-  }
-
   config._retried = true;
   try {
     // Bare axios call (must not run through these interceptors again), shared
     // across all concurrent 401s so at most one refresh runs at a time.
-    const access = await refreshAccessToken(refresh);
-    config.headers.Authorization = `Bearer ${access}`;
+    await refreshSession();
     return api(config);
   } catch {
     redirectToLogin();
@@ -115,5 +94,4 @@ export async function handleResponseError(error: unknown): Promise<unknown> {
   }
 }
 
-api.interceptors.request.use(attachAuthHeader);
 api.interceptors.response.use((response) => response, handleResponseError);

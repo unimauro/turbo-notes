@@ -4,8 +4,9 @@ jest.mock("@/services/api", () => ({
 
 import { api } from "@/services/api";
 import {
+  logout,
   obtainToken,
-  refreshToken,
+  refreshSession,
   register,
   resetPassword,
 } from "@/services/auth";
@@ -31,17 +32,15 @@ describe("register", () => {
 });
 
 describe("obtainToken", () => {
-  it("POSTs credentials to /auth/token/ and returns the token pair", async () => {
-    const tokens = { access: "acc", refresh: "ref" };
-    mockApi.post.mockResolvedValueOnce({ data: tokens });
+  it("POSTs credentials to /auth/token/ (tokens land in httpOnly cookies)", async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { detail: "Signed in." } });
 
-    const result = await obtainToken("a@b.co", "hunter22pass");
+    await obtainToken("a@b.co", "hunter22pass");
 
     expect(mockApi.post).toHaveBeenCalledWith("/auth/token/", {
       email: "a@b.co",
       password: "hunter22pass",
     });
-    expect(result).toEqual(tokens);
   });
 });
 
@@ -58,15 +57,22 @@ describe("resetPassword", () => {
   });
 });
 
-describe("refreshToken", () => {
-  it("POSTs the refresh token to /auth/token/refresh/", async () => {
-    mockApi.post.mockResolvedValueOnce({ data: { access: "fresh" } });
+describe("refreshSession", () => {
+  it("POSTs an empty body to /auth/token/refresh/ (refresh rides in the cookie)", async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { detail: "Refreshed." } });
 
-    const result = await refreshToken("ref");
+    await refreshSession();
 
-    expect(mockApi.post).toHaveBeenCalledWith("/auth/token/refresh/", {
-      refresh: "ref",
-    });
-    expect(result).toEqual({ access: "fresh" });
+    expect(mockApi.post).toHaveBeenCalledWith("/auth/token/refresh/", {});
+  });
+});
+
+describe("logout", () => {
+  it("POSTs to /auth/logout/ to clear the cookies server-side", async () => {
+    mockApi.post.mockResolvedValueOnce({ data: null });
+
+    await logout();
+
+    expect(mockApi.post).toHaveBeenCalledWith("/auth/logout/", {});
   });
 });

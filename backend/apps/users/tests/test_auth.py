@@ -214,3 +214,49 @@ class TestAuthThrottle:
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
         blocked = client.post(TOKEN_URL, creds, format="json")
         assert blocked.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+
+class TestCookieAuth:
+    """The browser SPA authenticates via httpOnly cookies (set alongside the
+    token body). The test client persists Set-Cookie, so we exercise the full
+    cookie path without ever touching the Authorization header."""
+
+    def test_login_sets_httponly_samesite_auth_cookies(self, client):
+        from apps.users.cookies import ACCESS_COOKIE, REFRESH_COOKIE
+
+        register(client)
+        response = client.post(TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        for name in (ACCESS_COOKIE, REFRESH_COOKIE):
+            assert name in response.cookies
+            assert response.cookies[name]["httponly"]
+            assert response.cookies[name]["samesite"] == "Lax"
+
+    def test_access_cookie_authenticates_without_bearer_header(self, client):
+        register(client)
+        # Login persists the cookies on the test client; no Authorization header.
+        client.post(TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json")
+        response = client.get(ME_URL)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["email"] == EMAIL
+
+    def test_refresh_reads_the_cookie_and_reissues_an_access_cookie(self, client):
+        from apps.users.cookies import ACCESS_COOKIE
+
+        register(client)
+        client.post(TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json")
+        # Empty body — the refresh cookie carries the token.
+        response = client.post(REFRESH_URL, {}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert ACCESS_COOKIE in response.cookies
+
+    def test_logout_clears_the_auth_cookies(self, client):
+        from apps.users.cookies import ACCESS_COOKIE, REFRESH_COOKIE
+
+        register(client)
+        client.post(TOKEN_URL, {"email": EMAIL, "password": PASSWORD}, format="json")
+        response = client.post(reverse("auth-logout"))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        # delete_cookie expires them (empty value).
+        assert response.cookies[ACCESS_COOKIE].value == ""
+        assert response.cookies[REFRESH_COOKIE].value == ""

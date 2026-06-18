@@ -5,11 +5,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.audit.models import AuthEvent
 from apps.audit.services import log_auth_event
 
+from .cookies import REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from .serializers import (
     EmailTokenObtainPairSerializer,
     PasswordResetSerializer,
@@ -77,6 +78,14 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             email=attempted,
             user=user,
         )
+        # Also issue the tokens as httpOnly cookies for the browser SPA (no
+        # JS-readable storage → no XSS exfiltration). The body still carries the
+        # tokens for Bearer/API clients.
+        set_auth_cookies(
+            response,
+            access=response.data.get("access"),
+            refresh=response.data.get("refresh"),
+        )
         return response
 
 
@@ -123,3 +132,38 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         return Response({"id": user.id, "email": user.email or user.username})
+
+
+@extend_schema(tags=["auth"])
+class CookieTokenRefreshView(TokenRefreshView):
+    """Refresh the access token from the refresh **cookie** (body still accepted).
+
+    The SPA never holds the refresh token in JS, so it sends nothing — the
+    httpOnly cookie carries it. We inject it into the serializer input when the
+    body omits it, then re-issue the access token as a fresh cookie.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not request.data.get("refresh"):
+            cookie = request.COOKIES.get(REFRESH_COOKIE)
+            if cookie:
+                # request.data is a plain dict for JSON requests; make it mutable
+                # if it's a QueryDict (form-encoded) before injecting.
+                if hasattr(request.data, "_mutable"):
+                    request.data._mutable = True
+                request.data["refresh"] = cookie
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            set_auth_cookies(response, access=response.data.get("access"))
+        return response
+
+
+@extend_schema(tags=["auth"])
+class LogoutView(APIView):
+    """Clear the auth cookies. Safe to call without being authenticated."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        return clear_auth_cookies(Response(status=status.HTTP_204_NO_CONTENT))
