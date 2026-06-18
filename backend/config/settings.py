@@ -167,7 +167,9 @@ REST_FRAMEWORK = {
     # JWT everywhere by default; the only AllowAny views are register/token
     # (declared per-view) and /api/health (a plain Django view, not DRF).
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Reads the access token from the httpOnly cookie (browser SPA) or the
+        # Authorization: Bearer header (API clients / tests).
+        "apps.users.authentication.CookieJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -209,6 +211,10 @@ SIMPLE_JWT = {
 # --- CORS -------------------------------------------------------------------
 
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+# The SPA authenticates via httpOnly cookies, so cross-origin XHR (dev: the
+# Next.js port → the API port) must send credentials. In prod the SPA and API
+# are same-origin, so this is only exercised in local/dev and CI E2E.
+CORS_ALLOW_CREDENTIALS = True
 
 # --- AI transcription (Whisper) ---------------------------------------------
 # OpenAI-compatible audio transcription. Works with OpenAI or any compatible
