@@ -47,17 +47,26 @@ app does the thinking, not just the storing.
 | Reminders & notifications | "remind me about this note tomorrow" | ★★★ | ★★ |
 | Share a note (read-only link) | Public link with a token; the data model already scopes by owner | ★★ | ★★ |
 
+## ✅ Shipped — post-review hardening (Jun 18, 2026)
+
+Acted on the code-review feedback; each landed as its own `PR → CI (incl. E2E) → merge → deploy`:
+
+| Item | Status |
+|---|---|
+| **httpOnly-cookie auth** | ✅ `HttpOnly · Secure · SameSite=Lax` cookies; `SameSite=Lax` as the CSRF defence (same-origin API); Bearer still accepted. Removed the `localStorage`/XSS tradeoff. |
+| **Playwright E2E** | ✅ register → create → autosave-persists → delete, over the real stack, wired into CI. |
+| **Editor refactor** | ✅ `NoteEditor` split into `useAiAssist` / `useReadAloud` / `useVoiceDictation` (1265 → ~840 lines, 97% cov). |
+| **Simple password reset** | ✅ `/reset` page + endpoint (no-email, generic 200, throttled). |
+
 ## Engineering & scale (the trust tier)
 
 | Item | Why | Effort |
 |---|---|---|
-| httpOnly cookie auth | Remove the localStorage/XSS tradeoff (already documented) | ★★ |
 | Postgres full-text search (tsvector + GIN) | Scale `?search=` past `ILIKE` | ★★ |
 | Cursor pagination | Stable paging for very large per-user note sets | ★ |
 | Redis caching + CDN | Cache hot reads; cache category counts | ★★ |
 | Kubernetes rollout | Use the `k8s/` manifests when traffic justifies it (HPA, ingress) | ★★★ |
 | Observability | Structured request logging, metrics, tracing | ★★ |
-| Playwright E2E | Browser tests over the `docker compose` stack | ★★ |
 
 ## If I had one more week
 

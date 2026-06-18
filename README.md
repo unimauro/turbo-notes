@@ -5,7 +5,7 @@
 [![Live demo](https://img.shields.io/badge/demo-notes.cardenas.pe-e8704a)](https://notes.cardenas.pe)
 [![AI review: CodeRabbit](https://img.shields.io/badge/AI%20review-CodeRabbit-ff570a)](https://coderabbit.ai)
 [![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
-![Tests](https://img.shields.io/badge/tests-backend%20100%25%20%C2%B7%20frontend%20105-blue)
+![Tests](https://img.shields.io/badge/tests-backend%20100%25%20%C2%B7%20frontend%20124%20%C2%B7%20E2E-blue)
 
 A production-quality notes application built for the Turbo AI Senior Full Stack Engineer challenge: Django 5 + DRF + PostgreSQL on the backend, Next.js (App Router) + TypeScript + TanStack Query on the frontend, JWT auth, per-user notes with color-coded categories, an autosaving editor — fully dockerized with CI, and styled to match the official prototype video (warm "cozy journal" design: cream paper, serif headings, pastel category cards, original kawaii illustrations).
 
@@ -16,6 +16,12 @@ The guiding principle throughout: **the right amount of engineering for the scop
 > **🔴 Live demo:** **[notes.cardenas.pe](https://notes.cardenas.pe)** — sign up, or log in with `demo@turbo.ai` / `demo12345` (backup: `demo2@turbo.ai` / `demo12345`). Each demo account is preloaded with sample notes.
 >
 > **AI (live):** dictate notes by voice (**OpenAI Whisper**), read them aloud (**TTS**), **suggest a title** / **summarize** with one click, and finish hands-free by saying **"close my note."** Everything degrades gracefully to free in-browser speech when no key is set.
+
+> **🆕 Latest — Jun 18, 2026 (post-review hardening).** Three follow-up PRs, each `PR → CI (incl. Playwright E2E) → merge → deploy`:
+> - **httpOnly-cookie auth** — tokens moved out of `localStorage` into `HttpOnly · Secure · SameSite=Lax` cookies (no JS-readable token → XSS-safe); `SameSite=Lax` is the CSRF defence for the same-origin API; `Authorization: Bearer` still accepted for API clients.
+> - **Editor refactor** — the large `NoteEditor` split into focused, unit-tested hooks (`useAiAssist`, `useReadAloud`, `useVoiceDictation`); 1265 → ~840 lines, 97% coverage.
+> - **End-to-end tests** — Playwright over the real stack (register → create → autosave-persists → delete), wired into CI.
+> - Plus a **simple password reset** (`/reset`). Slide deck: [**v2 (HTML)**](https://unimauro.github.io/turbo-notes/slides.html) · [**PDF**](docs/Turbo-Notes-Slides.pdf).
 
 ## Features
 
@@ -438,6 +444,5 @@ The near-term engineering items:
 - **User-defined categories** — owner FK on `Category`, CRUD endpoints, color picker constrained to the palette slugs.
 - **Search UI** — the API already supports `?search=`; surfacing it is a design decision deferred to match the prototype.
 - **Conflict detection for autosave** — an `updated_at` precondition (or version field) so concurrent edits from two tabs don't silently last-write-win.
-- **E2E tests with Playwright** — a thin layer over the critical paths (register → create → autosave → filter → delete) against the docker-compose stack.
 - **Dedicated note route** (`/notes/[id]`) for deep linking, complementing the takeover editor.
 - **Observability** — structured request logging, Sentry, and a `/api/health/ready` readiness probe that does check the DB.
