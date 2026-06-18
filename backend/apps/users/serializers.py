@@ -43,6 +43,36 @@ class RegisterSerializer(serializers.Serializer):
         )
 
 
+class PasswordResetSerializer(serializers.Serializer):
+    """Resets a password from ``{email, password}`` with **no** email round-trip.
+
+    Deliberately simple (challenge scope): there is no emailed token, so the
+    only thing standing between a request and a reset is knowing the address.
+    The tradeoff is documented in the README; brute-force is bounded by the
+    shared ``auth`` throttle scope. The new password still goes through Django's
+    validators. ``save`` is a no-op when no account matches, and the view always
+    returns a generic 200 — so the endpoint never reveals which emails exist.
+    """
+
+    email = serializers.EmailField(max_length=EMAIL_MAX_LENGTH)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_email(self, value: str) -> str:
+        # Mirror the registration invariant: email is stored lowercased.
+        return value.lower()
+
+    def validate_password(self, value: str) -> str:
+        validate_password(value)  # raises DRF-compatible ValidationError
+        return value
+
+    def save(self) -> User | None:
+        user = User.objects.filter(username__iexact=self.validated_data["email"]).first()
+        if user is not None:
+            user.set_password(self.validated_data["password"])
+            user.save(update_fields=["password"])
+        return user
+
+
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     """simplejwt's pair serializer, but the credential field is ``email``.
 

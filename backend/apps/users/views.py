@@ -1,5 +1,5 @@
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -10,7 +10,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.audit.models import AuthEvent
 from apps.audit.services import log_auth_event
 
-from .serializers import EmailTokenObtainPairSerializer, RegisterSerializer
+from .serializers import (
+    EmailTokenObtainPairSerializer,
+    PasswordResetSerializer,
+    RegisterSerializer,
+)
 
 
 @extend_schema(tags=["auth"])
@@ -74,6 +78,40 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             user=user,
         )
         return response
+
+
+@extend_schema(tags=["auth"])
+class PasswordResetView(APIView):
+    """POST {email, password} -> 200. Sets the password directly (no email).
+
+    See ``PasswordResetSerializer`` for the (deliberate, documented) security
+    tradeoff. Always returns a generic 200 so the response can't be used to
+    enumerate which emails are registered.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # credentials-in, no token required
+    # Same brute-force budget as login/register: anonymous, keyed by client IP.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
+
+    @extend_schema(request=PasswordResetSerializer, responses={200: None})
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        if user is not None:
+            # Audit only real resets; the generic response stays the same either way.
+            log_auth_event(
+                request,
+                event_type=AuthEvent.EventType.PASSWORD_RESET,
+                email=user.email,
+                user=user,
+            )
+        return Response(
+            {"detail": "If that account exists, its password has been updated."},
+            status=status.HTTP_200_OK,
+        )
 
 
 @extend_schema(tags=["auth"])
