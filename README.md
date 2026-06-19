@@ -21,7 +21,7 @@ The guiding principle throughout: **the right amount of engineering for the scop
 > - **httpOnly-cookie auth** — tokens moved out of `localStorage` into `HttpOnly · Secure · SameSite=Lax` cookies (no JS-readable token → XSS-safe); `SameSite=Lax` is the CSRF defence for the same-origin API; `Authorization: Bearer` still accepted for API clients.
 > - **Editor refactor** — the large `NoteEditor` split into focused, unit-tested hooks (`useAiAssist`, `useReadAloud`, `useVoiceDictation`); 1265 → ~840 lines, 97% coverage.
 > - **End-to-end tests** — Playwright over the real stack (register → create → autosave-persists → delete), wired into CI.
-> - Plus a **simple password reset** (`/reset`). Slide deck: [**v2 (HTML)**](https://unimauro.github.io/turbo-notes/slides.html) · [**PDF**](docs/Turbo-Notes-Slides.pdf).
+> - Plus a **simple password reset** (`/reset`). Slide deck **v2**: [**HTML**](https://unimauro.github.io/turbo-notes/slidesv2.html) · [**PDF**](docs/Turbo-Notes-Slides-v2.pdf) — the original submission deck stays at [slides.html](https://unimauro.github.io/turbo-notes/slides.html).
 
 ## Features
 

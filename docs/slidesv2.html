@@ -71,11 +71,12 @@
     </p>
     <p class="cover-badges" style="margin-top:26px;">
       <span class="tag">🔴 Live · notes.cardenas.pe</span>
-      <span class="tag">✓ Coverage 100%</span>
-      <span class="tag">✓ CI green</span>
+      <span class="tag">✓ Backend 100% · 124 FE tests</span>
+      <span class="tag">✓ Playwright E2E</span>
+      <span class="tag">🔒 httpOnly-cookie auth</span>
       <span class="tag">OWASP Top&nbsp;10</span>
     </p>
-    <div class="footer"><span>Carlos Cárdenas</span><span>Technical exposition</span></div>
+    <div class="footer"><span>Carlos Cárdenas</span><span>Technical exposition · v2 · Jun 2026</span></div>
   </section>
 
   <!-- 2 · What it is -->
@@ -94,7 +95,7 @@
         <p style="margin:.4em 0 0;">The right amount of engineering for the scope — clean layering, full coverage, documented tradeoffs, <em>no invented complexity</em>.</p>
       </div>
     </div>
-    <div class="footer"><span>Turbo Notes</span><span>01 / 07</span></div>
+    <div class="footer"><span>Turbo Notes</span><span>01 / 08</span></div>
   </section>
 
   <!-- 3 · Live demo -->
@@ -111,7 +112,7 @@
         <li>Uniform card grid · newest note flagged <span class="pill" style="font-size:.32em;padding:2px 8px;">Latest</span> · dark mode · infinite scroll.</li>
       </ul>
     </div>
-    <div class="footer"><span>Turbo Notes</span><span>02 / 07</span></div>
+    <div class="footer"><span>Turbo Notes</span><span>02 / 08</span></div>
   </section>
 
   <!-- 4 · Architecture -->
@@ -127,12 +128,12 @@ flowchart TD
     AI["OpenAI Whisper / TTS / gpt-4o-mini<br/>optional, key-gated"]
     UI -->|HTTPS| CADDY
     CADDY -->|web| WEB
-    CADDY -->|api + Bearer| API
+    CADDY -->|api + httpOnly cookie| API
     API --> DB
     API -.->|graceful| AI
     </div>
     <p class="mini" style="margin-top:6px;">Idiomatic DRF (ViewSet + serializers + models). Frontend layered <code>services → hooks → types</code> — mockable, unit-testable.</p>
-    <div class="footer"><span>Turbo Notes</span><span>03 / 07</span></div>
+    <div class="footer"><span>Turbo Notes</span><span>03 / 08</span></div>
   </section>
 
   <!-- 5 · Key flow -->
@@ -146,8 +147,8 @@ flowchart TB
     Rec --> Ins["Insert text → autosave"]
     Web --> Ins
     </div>
-    <p class="mini" style="margin-top:6px;">Same pattern for TTS, assist, and the hands-free command — every AI path falls back to a free one. Autosave does a single transparent token refresh on 401, then replays the request.</p>
-    <div class="footer"><span>Turbo Notes</span><span>04 / 07</span></div>
+    <p class="mini" style="margin-top:6px;">Same pattern for TTS, assist, and the hands-free command — every AI path falls back to a free one. On a 401 the axios layer does a single transparent <strong>cookie refresh</strong>, then replays the request.</p>
+    <div class="footer"><span>Turbo Notes</span><span>04 / 08</span></div>
   </section>
 
   <!-- 6 · CI/CD -->
@@ -171,7 +172,7 @@ flowchart TD
         <li><strong>Dependabot</strong> — weekly deps + security PRs.</li>
       </ul>
     </div>
-    <div class="footer"><span>Turbo Notes</span><span>05 / 07</span></div>
+    <div class="footer"><span>Turbo Notes</span><span>05 / 08</span></div>
   </section>
 
   <!-- 7 · Deploy + k8s + close -->
@@ -192,8 +193,25 @@ flowchart TD
         <p style="margin:.4em 0 0;">Kubernetes manifests are <em>documentation of the scale-out path, not the deployment in use</em>. The app runs as one isolated Compose stack — the right size today. The seam to Deployment + Service + HPA is shown, <strong>without overbuilding now.</strong></p>
       </div>
     </div>
-    <p class="mini" style="margin-top:10px;">Testing: backend <strong>pytest 100%</strong> (CI floor 85%, all OpenAI calls mocked) · frontend <strong>105 Jest tests</strong>. <span class="dot">●</span> Security: rate limiting, HSTS, audit log, OpenAI usage tracking, OWASP Top 10 write-up.</p>
-    <div class="footer"><span>Turbo Notes · notes.cardenas.pe</span><span>06 / 07</span></div>
+    <p class="mini" style="margin-top:10px;">Testing: backend <strong>pytest 100%</strong> (CI floor 85%, all OpenAI calls mocked) · frontend <strong>124 Jest tests</strong> · <strong>Playwright E2E</strong> over the stack. <span class="dot">●</span> Security: httpOnly-cookie auth, rate limiting, HSTS, audit log, OpenAI usage tracking, OWASP Top 10 write-up.</p>
+    <div class="footer"><span>Turbo Notes · notes.cardenas.pe</span><span>06 / 08</span></div>
+  </section>
+
+  <!-- 8 · Post-challenge hardening (acted on review feedback) -->
+  <section>
+    <h2><span class="num">07 · Acted on the review feedback</span>Post-challenge hardening</h2>
+    <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);">
+      <ul class="small">
+        <li>🔒 <strong>httpOnly-cookie auth</strong> — tokens left <code>localStorage</code>; now <code>HttpOnly · Secure · SameSite=Lax</code> cookies (no JS-readable token → no XSS exfiltration). Same-origin API ⇒ <em>Lax is the CSRF defence</em>, no extra token. Bearer still accepted for API clients.</li>
+        <li>🧩 <strong>Refactored the editor</strong> — the large <code>NoteEditor</code> split into focused, unit-tested hooks <code>useAiAssist · useReadAloud · useVoiceDictation</code> (1265 → ~840 lines, 97% cov).</li>
+        <li>🧪 <strong>E2E with Playwright</strong> — register → create → autosave-persists → delete, over the real stack, wired into CI. It caught a real auth-redirect bug.</li>
+      </ul>
+      <div class="card small">
+        <strong style="color:var(--olive)">Why it matters</strong>
+        <p style="margin:.4em 0 0;">Each item shipped as its own <strong>PR → CI (incl. E2E) → merge → deploy</strong>. The point isn't just the diff — it's <em>responding to feedback with verified, reviewable change</em>, and knowing <strong>when SameSite alone is enough</strong> vs. reaching for more.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Turbo Notes</span><span>07 / 08</span></div>
   </section>
 
 </div></div>
