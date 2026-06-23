@@ -198,6 +198,60 @@ class TestCategoryEndpoint:
         assert counts == {"Random Thoughts": 2, "School": 1, "Personal": 0, "Drama": 0}
 
 
+class TestPerUserCategories:
+    """User-created categories are private — visible only to their creator —
+    while the seeded categories (owner=NULL) stay global to everyone."""
+
+    def _client_for(self, u) -> APIClient:
+        c = APIClient()
+        c.force_authenticate(user=u)
+        return c
+
+    def test_create_category_sets_owner_and_returns_it(self, client, user):
+        response = client.post(CATEGORIES_URL, {"name": "Work", "color": "teal"}, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        body = response.json()
+        assert body["name"] == "Work" and body["color"] == "teal"
+        assert Category.objects.get(pk=body["id"]).owner == user
+
+    def test_created_category_is_visible_to_its_creator(self, client):
+        client.post(CATEGORIES_URL, {"name": "Work", "color": "teal"}, format="json")
+        names = [c["name"] for c in client.get(CATEGORIES_URL).json()]
+        assert "Work" in names
+
+    def test_private_category_is_invisible_to_other_users(self, client):
+        # User A creates a private category...
+        client.post(CATEGORIES_URL, {"name": "Secret", "color": "coral"}, format="json")
+        # ...user B must NOT see it, but still sees the global seeds.
+        other = self._client_for(UserFactory())
+        names = [c["name"] for c in other.get(CATEGORIES_URL).json()]
+        assert "Secret" not in names
+        assert "Random Thoughts" in names
+
+    def test_invalid_color_returns_400(self, client):
+        response = client.post(CATEGORIES_URL, {"name": "Bad", "color": "magenta"}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "color" in response.json()
+
+    def test_duplicate_name_for_same_user_returns_400(self, client):
+        client.post(CATEGORIES_URL, {"name": "Work", "color": "teal"}, format="json")
+        dup = client.post(CATEGORIES_URL, {"name": "work", "color": "coral"}, format="json")
+        assert dup.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in dup.json()
+
+    def test_two_users_can_reuse_the_same_name(self, client):
+        client.post(CATEGORIES_URL, {"name": "Work", "color": "teal"}, format="json")
+        other = self._client_for(UserFactory())
+        ok = other.post(CATEGORIES_URL, {"name": "Work", "color": "coral"}, format="json")
+        assert ok.status_code == status.HTTP_201_CREATED
+
+    def test_cannot_assign_another_users_category_to_a_note(self, client):
+        foreign = Category.objects.create(name="Theirs", color="teal", owner=UserFactory())
+        response = client.post(LIST_URL, {"title": "x", "category_id": foreign.id}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "category_id" in response.json()
+
+
 class TestCategoryFilter:
     def test_filter_notes_by_category(self, client, user):
         school = Category.objects.get(name="School")

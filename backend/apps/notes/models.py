@@ -17,12 +17,27 @@ class Category(models.Model):
         TEAL = "teal"
         LAVENDER = "lavender"
 
-    name = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=64)
     color = models.CharField(max_length=16, choices=Color.choices)
+    # null owner => a global, seeded category everyone sees.
+    # set owner  => a private, user-created category visible ONLY to its creator.
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="categories",
+    )
 
     class Meta:
         ordering = ["id"]  # seed order == display order (sidebar/dropdown)
         verbose_name_plural = "categories"
+        constraints = [
+            # A user can't have two categories with the same name. Globals have
+            # owner=NULL; Postgres treats NULLs as distinct and the seed names
+            # are unique, so the global rows are unaffected.
+            models.UniqueConstraint(fields=["owner", "name"], name="uniq_category_owner_name"),
+        ]
 
     def __str__(self) -> str:
         return self.name

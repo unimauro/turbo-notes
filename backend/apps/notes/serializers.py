@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 
 from .models import Category, Note, get_default_category
@@ -11,6 +12,29 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "color", "note_count"]
+
+
+class CategoryCreateSerializer(serializers.ModelSerializer):
+    """Create a private (per-user) category. ``owner`` is injected by the view.
+
+    Color is validated against the palette by the model choices. The name dup
+    check is done here (not via the DB constraint) so a repeat returns a clean
+    400 instead of a 500 IntegrityError — same pattern as duplicate-email on
+    registration.
+    """
+
+    class Meta:
+        model = Category
+        fields = ["id", "name", "color"]
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Name cannot be blank.")
+        owner = self.context["request"].user
+        if Category.objects.filter(owner=owner, name__iexact=value).exists():
+            raise serializers.ValidationError("You already have a category with this name.")
+        return value
 
 
 class NoteCategorySerializer(serializers.ModelSerializer):
@@ -39,6 +63,17 @@ class NoteSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Scope assignable categories to the visible set (global + own), so a
+        # user can't attach another user's private category to a note — an
+        # unknown/foreign id then fails validation (400) instead of leaking.
+        request = self.context.get("request")
+        if request is not None and request.user.is_authenticated:
+            self.fields["category_id"].queryset = Category.objects.filter(
+                Q(owner__isnull=True) | Q(owner=request.user)
+            )
 
     class Meta:
         model = Note
