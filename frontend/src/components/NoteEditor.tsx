@@ -6,6 +6,7 @@ import {
   Headphones,
   Loader2,
   Mic,
+  Plus,
   Sparkles,
   Square,
   Text,
@@ -19,6 +20,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import CategoryCreateModal from "@/components/CategoryCreateModal";
 import { useAiAssist } from "@/hooks/useAiAssist";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useCreateNote, useUpdateNote } from "@/hooks/useNotes";
@@ -64,6 +66,7 @@ export default function NoteEditor({
     note?.category,
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(
     note?.updated_at ?? null,
   );
@@ -438,6 +441,22 @@ export default function NoteEditor({
                     </li>
                   );
                 })}
+                <li
+                  role="presentation"
+                  className="mt-1 border-t border-ink-line/60 pt-1 dark:border-linen-soft/30"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setCategoryModalOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-ink/10 dark:text-linen dark:hover:bg-linen/10"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <span className="flex-1">Create New Category</span>
+                  </button>
+                </li>
               </ul>
             </>
           )}
@@ -719,6 +738,24 @@ export default function NoteEditor({
           category={forming.category}
           naming={formingNaming}
           settling={formingSettle}
+        />
+      )}
+
+      {categoryModalOpen && (
+        <CategoryCreateModal
+          onClose={() => setCategoryModalOpen(false)}
+          onCreated={(created) => {
+            // Select the new (private) category for this note and persist it,
+            // merging onto the authoritative snapshot like every other write.
+            setPickedCategory(created);
+            const snapshot = latestRef.current;
+            scheduleSave({
+              title: snapshot.title,
+              content: snapshot.content,
+              category: created,
+            });
+            setCategoryModalOpen(false);
+          }}
         />
       )}
     </div>
