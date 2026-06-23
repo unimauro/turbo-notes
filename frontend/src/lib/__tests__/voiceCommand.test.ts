@@ -1,8 +1,12 @@
 import {
   matchesTurboClose,
+  parseChangeCategory,
+  resolveCategory,
   stripTurboClose,
   TURBO_CLOSE_RE,
 } from "@/lib/voiceCommand";
+
+const NAMES = ["Random Thoughts", "School", "Personal", "Drama"];
 
 describe("stripTurboClose", () => {
   it("detects and strips the primary command, keeping the remaining real text", () => {
@@ -88,5 +92,53 @@ describe("matchesTurboClose (real-time listener matcher)", () => {
       false,
     );
     expect(matchesTurboClose("")).toBe(false);
+  });
+});
+
+describe("parseChangeCategory", () => {
+  it("detects 'change category to X' and captures the candidate", () => {
+    const r = parseChangeCategory("change category to school");
+    expect(r.triggered).toBe(true);
+    expect(r.candidate).toBe("school");
+    expect(r.before).toBe("");
+  });
+
+  it("supports switch/set and an optional 'the'", () => {
+    expect(parseChangeCategory("switch category to personal").triggered).toBe(true);
+    expect(parseChangeCategory("set the category drama").candidate).toBe("drama");
+  });
+
+  it("keeps any speech spoken before the command", () => {
+    const r = parseChangeCategory("buy milk change category to school");
+    expect(r.before).toBe("buy milk");
+    expect(r.candidate).toBe("school");
+  });
+
+  it("does not fire on unrelated speech", () => {
+    expect(parseChangeCategory("this is a category of its own").triggered).toBe(false);
+    expect(parseChangeCategory("change the title please").triggered).toBe(false);
+  });
+});
+
+describe("resolveCategory", () => {
+  it("matches a single-word category, case-insensitively", () => {
+    expect(resolveCategory("School", NAMES)).toEqual({ name: "School", rest: "" });
+  });
+
+  it("matches the LONGEST multi-word name and returns the leftover dictation", () => {
+    const r = resolveCategory("random thoughts and keep writing", NAMES);
+    expect(r.name).toBe("Random Thoughts");
+    expect(r.rest).toBe("and keep writing");
+  });
+
+  it("returns null when no known category matches", () => {
+    expect(resolveCategory("groceries", NAMES)).toEqual({
+      name: null,
+      rest: "groceries",
+    });
+  });
+
+  it("tolerates trailing punctuation", () => {
+    expect(resolveCategory("personal.", NAMES).name).toBe("Personal");
   });
 });

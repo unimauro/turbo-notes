@@ -28,6 +28,7 @@ import { useReadAloud } from "@/hooks/useReadAloud";
 import { useVoiceDictation } from "@/hooks/useVoiceDictation";
 import { categoryPalette } from "@/lib/colors";
 import { formatEditorTimestamp } from "@/lib/time";
+import { resolveCategory } from "@/lib/voiceCommand";
 import { assist } from "@/services/assist";
 import type { ListNotesParams } from "@/services/notes";
 import type { Category, CategoryRef, Note, NoteInput } from "@/types/note";
@@ -323,6 +324,30 @@ export default function NoteEditor({
     [ai.enabled],
   );
 
+  // Hands-free "change category to X": resolve the spoken candidate against the
+  // editor's categories; on a match, switch the note's category (persisted via
+  // the snapshot) and return the leftover dictation. null => no known category.
+  const handleCategoryCommand = useCallback(
+    (candidate: string) => {
+      const { name, rest } = resolveCategory(
+        candidate,
+        categories.map((c) => c.name),
+      );
+      if (!name) return null;
+      const picked = categories.find((c) => c.name === name);
+      if (!picked) return null;
+      setPickedCategory(picked);
+      const snapshot = latestRef.current;
+      scheduleSave({
+        title: snapshot.title,
+        content: snapshot.content,
+        category: picked,
+      });
+      return { rest };
+    },
+    [categories, scheduleSave],
+  );
+
   // ---- Voice dictation (Web Speech + Whisper + hands-free close) — hook ----
   // The full dictation/transcription pipeline and the "turbo close" race
   // handling live in the hook; it hands off to the shared forming-card finale.
@@ -333,6 +358,7 @@ export default function NoteEditor({
     playFormingCard,
     buildNameTitle,
     stopReadAloud: readAloud.stop,
+    onCategoryCommand: handleCategoryCommand,
   });
 
   // ---- UI -----------------------------------------------------------------

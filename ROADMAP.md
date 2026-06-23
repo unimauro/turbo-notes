@@ -57,6 +57,10 @@ Acted on the code-review feedback; each landed as its own `PR → CI (incl. E2E)
 | **Playwright E2E** | ✅ register → create → autosave-persists → delete, over the real stack, wired into CI. |
 | **Editor refactor** | ✅ `NoteEditor` split into `useAiAssist` / `useReadAloud` / `useVoiceDictation` (1265 → ~840 lines, 97% cov). |
 | **Simple password reset** | ✅ `/reset` page + endpoint (no-email, generic 200, throttled). |
+| **Per-user categories** | ✅ "Create New Category" — private (per-user) categories; `owner IS NULL OR owner=me` visibility; `category_id` scoped so you can't attach another user's category. |
+| **Voice "change category to X"** | ✅ hands-free category switch mid-dictation (extends the `voiceCommand` parser; resolves the spoken name against your categories). |
+
+**Voice-first, next:** a multi-step **"create category" by voice** — dictate the name, pick the color by voice ("green", "yellow"), then "save". A small voice state-machine; deferred to its own PR.
 
 ## Engineering & scale (the trust tier)
 

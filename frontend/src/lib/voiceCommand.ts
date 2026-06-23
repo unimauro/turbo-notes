@@ -61,3 +61,59 @@ export function stripTurboClose(text: string): StripTurboCloseResult {
     .trim();
   return { cleaned, triggered: true };
 }
+
+/**
+ * Hands-free "change category to <name>" command.
+ *
+ * Matches "change/switch/set [the] category [to] <rest>" (lenient, case-
+ * insensitive). The captured `<rest>` is the spoken candidate — the category
+ * name plus any dictation that followed in the same breath — which the caller
+ * resolves against the user's actual categories via {@link resolveCategory}.
+ */
+export const CHANGE_CATEGORY_RE =
+  /\b(?:change|switch|set)\s+(?:the\s+)?category\s+(?:to\s+)?(?:the\s+)?(.*)$/i;
+
+export interface ChangeCategoryResult {
+  triggered: boolean;
+  /** Spoken text AFTER the command lead-in (candidate name + trailing dictation). */
+  candidate: string;
+  /** Spoken text BEFORE the command lead-in (kept as real dictation). */
+  before: string;
+}
+
+export function parseChangeCategory(text: string): ChangeCategoryResult {
+  const match = CHANGE_CATEGORY_RE.exec(text);
+  if (!match) return { triggered: false, candidate: "", before: "" };
+  return {
+    triggered: true,
+    before: text.slice(0, match.index).trim(),
+    candidate: (match[1] ?? "").trim(),
+  };
+}
+
+/**
+ * Resolve a spoken candidate against the known category names, matching the
+ * LONGEST name whose words prefix the candidate (so "Random Thoughts" wins over
+ * a bare "Random"). Returns the matched name (original casing) and the leftover
+ * dictation after it, or `{ name: null }` when nothing matches.
+ */
+export function resolveCategory(
+  candidate: string,
+  names: string[],
+): { name: string | null; rest: string } {
+  const words = candidate.trim().split(/\s+/).filter(Boolean);
+  const lc = words.map((w) => w.toLowerCase().replace(/[.,;:!?]+$/, ""));
+  let best: string | null = null;
+  let bestLen = 0;
+  for (const name of names) {
+    const nameWords = name.toLowerCase().split(/\s+/);
+    const isPrefix =
+      nameWords.length <= lc.length && nameWords.every((w, i) => w === lc[i]);
+    if (isPrefix && nameWords.length > bestLen) {
+      best = name;
+      bestLen = nameWords.length;
+    }
+  }
+  if (best === null) return { name: null, rest: candidate.trim() };
+  return { name: best, rest: words.slice(bestLen).join(" ").trim() };
+}

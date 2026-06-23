@@ -29,6 +29,7 @@ npm-debug.log*
 
 # internal working docs (not part of the deliverable)
 .internal/
+PRACTICE-PROMPT-REPO-AWARE.md
 
 # production env (never commit real secrets)
 deploy/.env
