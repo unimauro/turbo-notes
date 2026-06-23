@@ -63,3 +63,33 @@ test("the board is protected: anonymous visit redirects to /login", async ({
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: /yay, you're back/i })).toBeVisible();
 });
+
+test("create a private category and assign it to a note", async ({ page }) => {
+  const email = uniqueEmail();
+  const catName = `Work ${Date.now()}`;
+
+  // Register, then open a fresh note.
+  await page.goto("/signup");
+  await page.getByPlaceholder("Email address").fill(email);
+  await page.getByPlaceholder("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign Up" }).click();
+  await page.getByRole("button", { name: "New Note" }).click();
+
+  // Scope to the editor dialog — the board sidebar also has a "Random Thoughts"
+  // button, so an unscoped locator would match two elements.
+  const editor = page.getByRole("dialog", { name: "New note" });
+
+  // Open the category dropdown → "Create New Category".
+  await editor.getByRole("button", { name: /random thoughts/i }).click();
+  await editor.getByRole("button", { name: /create new category/i }).click();
+
+  // Fill the modal (name + a color) and submit.
+  await page.getByPlaceholder("Enter name").fill(catName);
+  await page.getByRole("radio", { name: "teal" }).click();
+  await page.getByRole("button", { name: "Create Category" }).click();
+
+  // The new category is now selected on the editor's dropdown.
+  await expect(
+    editor.getByRole("button", { name: new RegExp(catName, "i") }),
+  ).toBeVisible();
+});

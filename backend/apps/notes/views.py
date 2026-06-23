@@ -4,7 +4,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import filters, generics, viewsets
 
 from .models import Category, Note
-from .serializers import CategorySerializer, NoteSerializer
+from .serializers import CategoryCreateSerializer, CategorySerializer, NoteSerializer
 
 
 @extend_schema(
@@ -50,17 +50,29 @@ class NoteViewSet(viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
 
-class CategoryListView(generics.ListAPIView):
-    """All categories with the *requesting user's* note count.
+class CategoryListCreateView(generics.ListCreateAPIView):
+    """List the user's visible categories — global (owner NULL) **plus** their
+    own — each with the requesting user's note count, and create a new private
+    category (``owner`` = the requester).
 
-    Always 4 rows (seed data), so pagination is disabled — the frontend
-    sidebar consumes a plain array.
+    Visibility is enforced in ``get_queryset``: a user can never see another
+    user's private category. Pagination is disabled — the frontend sidebar
+    consumes a plain array.
     """
 
-    serializer_class = CategorySerializer
     pagination_class = None
 
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return CategoryCreateSerializer
+        return CategorySerializer
+
     def get_queryset(self):
-        return Category.objects.annotate(
-            note_count=Count("notes", filter=Q(notes__owner=self.request.user))
+        return (
+            Category.objects.filter(Q(owner__isnull=True) | Q(owner=self.request.user))
+            .annotate(note_count=Count("notes", filter=Q(notes__owner=self.request.user)))
+            .order_by("id")
         )
+
+    def perform_create(self, serializer: CategoryCreateSerializer) -> None:
+        serializer.save(owner=self.request.user)
