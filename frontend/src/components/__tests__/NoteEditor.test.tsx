@@ -599,3 +599,33 @@ describe("NoteEditor — 'card being created' close transition", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("NoteEditor — hands-free 'change category'", () => {
+  beforeEach(() => {
+    getTranscriptionEnabledMock.mockResolvedValue(true);
+    createNoteMock.mockResolvedValue(savedNote);
+    updateNoteMock.mockResolvedValue(savedNote);
+  });
+
+  it("switches the note's category when the user says 'change category to X'", async () => {
+    renderEditor(savedNote); // starts on "Random Thoughts"
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(whisperOptions).not.toBeNull();
+
+    // The dropdown trigger shows the starting category.
+    expect(
+      screen.getByRole("button", { name: /random thoughts/i }),
+    ).toBeInTheDocument();
+
+    // Spoken command flows through the Whisper transcript callback.
+    await act(async () => {
+      whisperOptions!.onTranscript("change category to School");
+    });
+
+    // The category switched — the dropdown trigger now shows "School".
+    expect(screen.getByRole("button", { name: /school/i })).toBeInTheDocument();
+  });
+});

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 
 import { useDictation } from "@/hooks/useDictation";
 import { useWhisperRecorder } from "@/hooks/useWhisperRecorder";
-import { stripTurboClose } from "@/lib/voiceCommand";
+import { parseChangeCategory, stripTurboClose } from "@/lib/voiceCommand";
 import { getTranscriptionEnabled } from "@/services/transcription";
 import type { CategoryRef } from "@/types/note";
 
@@ -24,6 +24,13 @@ interface UseVoiceDictationArgs {
   buildNameTitle: () => (() => Promise<string>) | undefined;
   /** Silences any read-aloud playback (turbo close stops everything first). */
   stopReadAloud: () => void;
+  /**
+   * Handle a spoken "change category to X" candidate. The editor resolves it
+   * against its categories and, on a match, switches the note's category (a
+   * side effect) and returns the leftover dictation; returns null when no known
+   * category matched (so the words are dictated literally instead).
+   */
+  onCategoryCommand?: (candidate: string) => { rest: string } | null;
 }
 
 export interface UseVoiceDictation {
@@ -62,6 +69,7 @@ export function useVoiceDictation({
   playFormingCard,
   buildNameTitle,
   stopReadAloud,
+  onCategoryCommand,
 }: UseVoiceDictationArgs): UseVoiceDictation {
   // Guards the hands-free "Turbo close" sequence so a second match (or a stray
   // final transcript) can't re-trigger it.
@@ -89,32 +97,52 @@ export function useVoiceDictation({
   // closure; React state is synced from that authoritative value.
   const appendDictation = useCallback(
     (text: string) => {
-      // Hands-free "Turbo close": strip the command phrase out (so the literal
-      // words never land in the note), append any remaining text, then close.
-      const { cleaned, triggered } = stripTurboClose(text);
-      const append = triggered ? cleaned : text;
-
-      if (append) {
+      // Append a chunk of text onto the authoritative snapshot (never a stale
+      // closure) with sensible spacing, then schedule the autosave. Reads
+      // latestRef AFTER any category switch so it persists the new category.
+      const appendText = (chunk: string) => {
+        if (!chunk) return;
         const snapshot = latestRef.current;
-        const current = snapshot.content;
-        const sep = current.length === 0 || /\s$/.test(current) ? "" : " ";
-        const next = current + sep + append;
+        const sep =
+          snapshot.content.length === 0 || /\s$/.test(snapshot.content) ? "" : " ";
+        const next = snapshot.content + sep + chunk;
         setContent(next);
         scheduleSave({
           title: snapshot.title,
           content: next,
           category: snapshot.category,
         });
+      };
+
+      const releasePending = () => {
+        // The (possibly delayed) Whisper transcript has now landed in latestRef.
+        if (pendingTranscriptRef.current) {
+          pendingTranscriptRef.current.resolve();
+          pendingTranscriptRef.current = null;
+        }
+      };
+
+      // (1) Hands-free "change category to X": switch the category and keep
+      // dictating the rest. Only when a KNOWN category matches; otherwise the
+      // words fall through and are dictated literally.
+      const change = parseChangeCategory(text);
+      if (change.triggered && onCategoryCommand) {
+        const result = onCategoryCommand(change.candidate);
+        if (result) {
+          appendText([change.before, result.rest].filter(Boolean).join(" ").trim());
+          setTranscribeError(null);
+          releasePending();
+          return;
+        }
       }
+
+      // (2) Hands-free "Turbo close": strip the command phrase out (so the
+      // literal words never land in the note), append any remaining text, close.
+      const { cleaned, triggered } = stripTurboClose(text);
+      appendText(triggered ? cleaned : text);
       // A working append means any prior transcribe error is stale; clear it.
       setTranscribeError(null);
-
-      // The (possibly delayed) Whisper transcript has now landed in latestRef.
-      // Release turboClose, which may be awaiting it before title-gen.
-      if (pendingTranscriptRef.current) {
-        pendingTranscriptRef.current.resolve();
-        pendingTranscriptRef.current = null;
-      }
+      releasePending();
 
       // Fire the close when EITHER the transcript contained the command, OR the
       // real-time listener already heard it (pendingFinishRef). Guard: once only.
@@ -124,7 +152,7 @@ export function useVoiceDictation({
         turboCloseRef.current?.();
       }
     },
-    [latestRef, scheduleSave, setContent],
+    [latestRef, scheduleSave, setContent, onCategoryCommand],
   );
 
   const dictation = useDictation({ onFinalTranscript: appendDictation });
